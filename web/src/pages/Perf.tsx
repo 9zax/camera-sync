@@ -1,5 +1,5 @@
 import { motion, type Variants } from "motion/react"
-import { Gauge, ShieldCheck, Zap } from "lucide-react"
+import { Gauge, ShieldCheck, Users, Zap } from "lucide-react"
 import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Logo } from "@/components/Logo"
@@ -12,10 +12,80 @@ const stagger: Variants = { hidden: {}, show: { transition: { staggerChildren: 0
 
 // ---- ผล load test จริงที่วัดไว้ (18 ต.ค. 2026, Apple Silicon, ผ่าน https จริง) ----
 const OURS = [
-  { label: "เครื่องช่างภาพโดยตรง", value: "3,360", unit: "คำขอ/วินาที", note: "จุดสูงสุดที่ 32 การเชื่อมต่อพร้อมกัน · error 0%" },
-  { label: "ผ่าน hub ของจริง (อินเทอร์เน็ตบ้าน)", value: "735", unit: "คำขอ/วินาที", note: "ที่ 64 การเชื่อมต่อพร้อมกัน · p95 = 125ms · error 0%" },
-  { label: "เวลาตอบสนอง กลาง ๆ (p50)", value: "72", unit: "มิลลิวินาที", note: "วัดผ่าน HTTPS จริงจากอินเทอร์เน็ต" },
-  { label: "อัตราส่งภาพ", value: "2.7", unit: "MB/วินาที", note: "ข้อจำกัดคือความเร็วอัปโหลดของเน็ตบ้าน (~21Mbps) ไม่ใช่ซอฟต์แวร์" },
+  {
+    label: "เครื่องช่างภาพโดยตรง",
+    value: "3,360",
+    unit: "คำขอ/วินาที",
+    note: "จุดสูงสุดที่ 32 การเชื่อมต่อพร้อมกัน · error 0%",
+    plain:
+      "ตัวเลขนี้คือความสามารถสูงสุดของเครื่องช่างภาพในการตอบคำขอ — ทุกครั้งที่แขกเปิดหน้าเว็บ ดึงรายการรูป หรือโหลดรูปภาพ 1 ภาพ นับเป็น 1 “คำขอ” — เครื่องเดียวจัดการได้ถึงวินาทีละ 3,360 คำขอ",
+    life: "เทียบให้เห็นภาพ: แขก 150–200 คนเปิดมือถือเลื่อนดูรูปพร้อมกันในจังหวะเดียวกัน ระบบยังถือว่า “ว่าง” — ความเร็วเริ่มลดลงเมื่อกดพร้อมกันเกินระดับหลายร้อยคน ซึ่งในงานแต่งจริงแทบไม่เกิด",
+  },
+  {
+    label: "ผ่าน hub ของจริง (อินเทอร์เน็ตบ้าน)",
+    value: "735",
+    unit: "คำขอ/วินาที",
+    note: "ที่ 64 การเชื่อมต่อพร้อมกัน · p95 = 125ms · error 0%",
+    plain:
+      "รอบนี้ยิงจากอินเทอร์เน็ตจริงเข้ามาทาง sync.khunaistory.com เหมือนแขกคนหนึ่ง — รูปวิ่งจากเน็ตบ้านของช่างภาพออกสู่โลกจริง ตัวเลขต่ำกว่ารอบแรกเพราะคอขวดคือ “ความเร็วอัปโหลดของสายเน็ตบ้าน” (~21Mbps) ไม่ใช่ตัวซอฟต์แวร์",
+    life: "แปลง่าย ๆ: ท่อน้ำ (เน็ตบ้าน) เล็กกว่าถังน้ำ (เครื่องช่างภาพ) — ถ้าวันหนึ่งอัปเกรดเน็ต ตัวเลขนี้ขยับขึ้นเองโดยไม่ต้องแก้อะไรเลย",
+  },
+  {
+    label: "เวลาตอบสนอง กลาง ๆ (p50)",
+    value: "72",
+    unit: "มิลลิวินาที",
+    note: "วัดผ่าน HTTPS จริงจากอินเทอร์เน็ต",
+    plain:
+      "p50 คือ “คนกลาง” — ครึ่งหนึ่งของทุกคำขอได้คำตอบเร็วกว่านี้ อีกครึ่งช้ากว่านี้เล็กน้อย 72 มิลลิวินาที คือประมาณ 1 ใน 3 ของการกระพริบตาหนึ่งครั้ง",
+    life: "สัมผัสของแขก: ลัดเด้งปุ๊บ เนื้อหาขึ้นเกือบทันที ไม่มีอาการ “กดแล้วหน้าค้างรอโหลด”",
+  },
+  {
+    label: "อัตราส่งภาพ",
+    value: "2.7",
+    unit: "MB/วินาที",
+    note: "ข้อจำกัดคือความเร็วอัปโหลดของเน็ตบ้าน (~21Mbps) ไม่ใช่ซอฟต์แวร์",
+    plain:
+      "ปริมาณ “ข้อมูลภาพ” ที่ไหลออกสู่แขกได้ต่อวินาทีผ่านอินเทอร์เน็ตจริง — รูปย่อขนาด ~30–60KB ให้คำนวณคร่าว ๆ ได้ว่าหนึ่งวินาทีส่งรูปย่อได้ราว 40–80 ภาพพร้อมกัน",
+    life: "ในงานจริง: แขกหลายสิบคนเปิดแกลเลอรีพร้อมกัน รูปปรากฏเรียงกันเป็นแถวได้ลื่น ๆ ไม่ต้องรอทีละรูป",
+  },
+]
+
+// ---- ศัพท์ที่เจอบนหน้านี้ อธิบายแบบไม่ต้องเป็นเทคนิค ----
+const GLOSSARY = [
+  {
+    term: "คำขอ/วินาที (requests per second)",
+    body:
+      "ทุกครั้งที่มีคนเปิดหน้าเว็บ ดึงรายการรูป หรือโหลดรูป 1 ภาพ = ส่ง “คำขอ” มาที่เครื่องช่างภาพ 1 ครั้ง ตัวเลขยิ่งสูง = เลี้ยงคนพร้อมกันได้ยิ่งมาก",
+  },
+  {
+    term: "การเชื่อมต่อพร้อมกัน (concurrent)",
+    body:
+      "จำนวนคนที่ “กำลังใช้อยู่ในจังหวะเดียวกัน” (กด เลื่อน โหลดรูป) — “จุดสูงสุดที่ 32” แปลว่าความเร็วถึงจุดสูงสุดตอนมี 32 คนใช้พร้อมกัน และที่ 64 คน (ผ่านเน็ตจริง) ระบบก็ยังไม่มีสะดุด ส่วน “แขกทั้งงาน” ไม่ได้กดพร้อมกันตลอดเวลา คนส่วนใหญ่อ่านรูปเงียบ ๆ",
+  },
+  {
+    term: "error 0%",
+    body:
+      "จากคำขอหลายหมื่นครั้งตลอดการทดสอบ ไม่มีแม้แต่คำขอเดียวที่ล้มเหลว — แปลว่าไม่มีใครเจอหน้าค้าง รูปโหลดไม่ขึ้น หรือลิงก์ใช้ไม่ได้แม้แต่ครั้งเดียว",
+  },
+  {
+    term: "p50 / p95",
+    body:
+      "เรียงเวลาตอบของทุกคำขอจากเร็วไปช้า p50 คือคนตรงกลาง p95 คือ “คนที่ช้ากว่า 95% ของทุกคน” — ถ้าแม้แต่ p95 ยังเร็ว แปลว่าเกือบทุกคนได้ประสบการณ์ดี ไม่ใช่แค่ค่าเฉลี่ยที่สวยแต่มีคนโชคร้ายรอนาน",
+  },
+  {
+    term: "MB/วินาที (อัตราส่งข้อมูล)",
+    body:
+      "ปริมาณภาพที่ส่งออกได้ต่อวินาที เหมือนขนาดท่อน้ำ — ท่อของเราคือสายเน็ตบ้านของช่างภาพ ถ้าเน็ตเร็วขึ้นท่อก็กว้างขึ้นทันที",
+  },
+]
+
+// ---- ตัวเลขทั้งหมด แปลเป็นภาษางานแต่ง ----
+const WEDDING = [
+  "แขก 150–200 คนเปิดแกลเลอรีพร้อมกันตอนเลี้ยงโต๊ะจีนเสิร์ตอาหาร ระบบยังไม่ทำงานหนัก",
+  "กดลิงก์จาก QR แล้วเห็นรูปเกือบทันที (ครึ่งหนึ่งของการกระพริบตา) แม้เน็ตในงานคนเยอะ",
+  "คนที่เน็ตช้าที่สุดในห้อง ก็ได้รูปภายใน ~0.1 วินาที (นั่นคือค่า p95 ผ่านอินเทอร์เน็ตจริง)",
+  "รูปใหม่จากกล้องถึงมือแขก ~30 วินาทีหลังกดชัตเตอร์ — เพราะไม่ต้องอัปโหลดขึ้นคลาวด์แล้วรอคิว",
+  "ไม่ว่างานจะ 500 หรือ 5,000 รูป ค่าใช้จ่ายเท่าเดิม เพราะรูปอยู่ในเครื่องช่างภาพ ไม่เช่าพื้นที่คลาวด์เพิ่ม",
 ]
 
 // ---- เทียบกับระบบแบบอัปโหลดเก็บบนคลาวด์ทั่วไป (ค่าประมาณจากการใช้งานจริง) ----
@@ -59,6 +129,7 @@ export default function Perf() {
           <motion.p variants={reveal} className="mt-4 max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
             เรา load test ระบบของตัวเองด้วยสถานการณ์เหมือนงานแต่งจริง แล้วเก็บผลไว้ที่หน้านี้ —
             เทียบกับระบบแบบเดิมที่ต้องอัปโหลดรูปขึ้นคลาวด์อย่างชัดเจน ไม่มีตัวเลขสวยหลอกตา
+            ทุกการ์ดมีคำแปลภาษาคนทั่วไปกำกับไว้ให้อ่านจบเข้าใจได้เลย
           </motion.p>
 
           {/* our measured numbers */}
@@ -69,9 +140,47 @@ export default function Perf() {
                 <p className="mt-3 font-display text-4xl font-light text-gold">
                   {m.value} <span className="text-base text-muted-foreground">{m.unit}</span>
                 </p>
-                <p className="mt-2 text-[12.5px] leading-relaxed text-muted-foreground">{m.note}</p>
+                <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground/80">{m.note}</p>
+                <div className="mt-4 space-y-2.5 border-t border-[var(--rule)] pt-4 text-[13px] leading-relaxed">
+                  <p className="text-foreground/90">{m.plain}</p>
+                  <p className="text-muted-foreground">{m.life}</p>
+                </div>
               </div>
             ))}
+          </motion.div>
+
+          {/* plain-language glossary */}
+          <motion.h2 variants={reveal} className="mt-16 font-display text-2xl font-light sm:text-3xl">
+            ศัพท์บนหน้านี้ <span className="text-gold">แปลเป็นคนทั่วไปแล้วหมายถึงอะไร</span>
+          </motion.h2>
+          <motion.p variants={reveal} className="mt-3 max-w-2xl text-[13.5px] leading-relaxed text-muted-foreground">
+            ไม่ต้องเป็นคนเทคนิคก็อ่านทำความเข้าใจตัวเลขข้างบนได้ทั้งหมด
+          </motion.p>
+          <motion.div variants={reveal} className="mt-6 grid gap-4 sm:grid-cols-2">
+            {GLOSSARY.map((g) => (
+              <div key={g.term} className="rounded-md border border-[var(--rule)] bg-card/50 p-5">
+                <p className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-gold">{g.term}</p>
+                <p className="mt-2.5 text-[13px] leading-relaxed text-muted-foreground">{g.body}</p>
+              </div>
+            ))}
+          </motion.div>
+
+          {/* wedding translation */}
+          <motion.h2 variants={reveal} className="mt-16 font-display text-2xl font-light sm:text-3xl">
+            แปลเป็นภาษางานแต่ง <span className="text-gold">แล้วมันแปลว่าอะไร</span>
+          </motion.h2>
+          <motion.div variants={reveal} className="mt-6 rounded-md border border-[var(--rule)] bg-card p-6 sm:p-8">
+            <p className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
+              <Users className="size-4 text-patina" /> ถ้าเอาไปใช้ในงานจริง
+            </p>
+            <ul className="mt-5 space-y-4">
+              {WEDDING.map((w) => (
+                <li key={w} className="flex gap-3 text-[14px] leading-relaxed text-foreground/90">
+                  <span className="mt-2 size-1.5 shrink-0 rounded-full bg-gold" />
+                  {w}
+                </li>
+              ))}
+            </ul>
           </motion.div>
 
           {/* comparison table */}
