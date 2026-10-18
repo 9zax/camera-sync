@@ -4,128 +4,293 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CameraSync — แกลเลอรีงานแต่งสด + ค้นหารูปด้วยเซลฟี่</title>
+<meta name="description" content="ภาพงานแต่งออนไลน์ทันทีที่กดชัตเตอร์ — แขกสแกน QR ดูรูปสด และถ่ายเซลฟี่เพื่อหารูปของตัวเองได้ทันที">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600&family=Noto+Serif+Thai:ital,wght@0,500;0,600;0,700;1,600&display=swap" rel="stylesheet">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   :root {
-    --bg:#faf7f2; --card:#fff; --ink:#2a2420; --muted:#6b6560;
-    --primary:#8e5a54; --primary-ink:#fdf9f4; --border:#e7dfd5; --ok:#0f9d58;
+    --bg:#faf7f2; --bg2:#f4ede2; --card:#fffdf9; --ink:#2a2420; --muted:#6f6760;
+    --primary:#8e5a54; --primary-deep:#7e4e49; --primary-ink:#fdf9f4;
+    --gold:#c9a24b; --gold-soft:rgba(201,162,75,.35);
+    --border:#e8dfd3; --line:rgba(42,36,32,.12);
   }
+  html { scroll-behavior:smooth; }
   body {
     font-family:"Anuphan","Noto Sans Thai",-apple-system,"Segoe UI",system-ui,sans-serif;
-    background:var(--bg); color:var(--ink); line-height:1.6;
+    background:var(--bg); color:var(--ink); line-height:1.65;
+    -webkit-font-smoothing:antialiased;
   }
-  .wrap { max-width:880px; margin:0 auto; padding:0 20px; }
-  header { display:flex; align-items:center; gap:11px; padding:22px 0 6px; }
-  .logo { width:40px; height:40px; border-radius:12px; background:var(--primary); color:var(--primary-ink);
-          display:flex; align-items:center; justify-content:center; font-size:21px; }
-  header h1 { font-size:21px; }
-  header p { font-size:12.5px; color:var(--muted); }
-  .hero { text-align:center; padding:44px 0 34px; }
-  .hero .badge { display:inline-flex; align-items:center; gap:8px; background:var(--card); border:1px solid var(--border);
-                 border-radius:999px; padding:6px 14px; font-size:12.5px; margin-bottom:18px; box-shadow:0 1px 3px rgba(42,36,32,.06); }
-  .dot { width:7px; height:7px; border-radius:50%; background:var(--primary); animation:pulse 1.8s infinite; }
+  .serif { font-family:"Noto Serif Thai",Georgia,serif; }
+  .wrap { max-width:920px; margin:0 auto; padding:0 22px; }
+
+  /* ---------- entrance ---------- */
+  @keyframes rise { from { opacity:0; transform:translateY(26px); filter:blur(8px);} to { opacity:1; transform:none; filter:blur(0);} }
+  @keyframes sweep { from { transform:scaleX(0);} to { transform:scaleX(1);} }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-  .hero h2 { font-size:clamp(26px,5vw,40px); font-weight:700; line-height:1.25; }
-  .hero h2 span { color:var(--primary); }
-  .hero p { color:var(--muted); max-width:560px; margin:14px auto 0; font-size:15.5px; }
-  .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding-bottom:26px; }
-  @media (max-width:720px){ .grid { grid-template-columns:1fr; } }
-  .card { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:22px; }
-  .card h3 { font-size:16.5px; margin-bottom:4px; }
-  .card .who { font-size:12px; color:var(--primary); font-weight:600; letter-spacing:.04em; margin-bottom:10px; }
-  .card ol { margin:10px 0 0 18px; font-size:14px; color:var(--ink); }
-  .card ol li { margin:7px 0; }
-  .card .sub { font-size:13px; color:var(--muted); margin-top:10px; }
-  .btns { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
-  .btn { display:inline-flex; align-items:center; gap:8px; border:none; border-radius:999px; padding:11px 20px;
-         font-size:14px; font-weight:600; font-family:inherit; cursor:pointer; text-decoration:none;
-         background:var(--primary); color:var(--primary-ink); transition:transform .12s; }
-  .btn:hover { transform:translateY(-1px); }
-  .btn.green { background:#06c755; }
-  .btn.ghost { background:#f0e8dd; color:var(--ink); }
-  .strip { background:#f3ece1; border:1px dashed #d8c9b8; border-radius:16px; padding:18px 20px;
-           display:flex; gap:12px; align-items:flex-start; margin-bottom:30px; }
-  .strip .ic { font-size:20px; }
+  .rise { opacity:0; animation:rise .9s cubic-bezier(.16,1,.3,1) forwards; }
+  .d1{animation-delay:.05s} .d2{animation-delay:.15s} .d3{animation-delay:.25s}
+  .d4{animation-delay:.38s} .d5{animation-delay:.5s} .d6{animation-delay:.62s}
+  @media (prefers-reduced-motion:reduce){ .rise{animation:none;opacity:1} .dot{animation:none} .u{animation:none!important} }
+
+  /* ---------- header ---------- */
+  header { display:flex; align-items:center; justify-content:space-between; padding:20px 0; }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .brand h1 { font-size:19px; font-weight:700; letter-spacing:-.01em; }
+  .brand p { font-size:11.5px; color:var(--muted); margin-top:-2px; }
+  header .top-cta {
+    display:inline-flex; align-items:center; gap:7px; text-decoration:none;
+    border:1px solid var(--border); background:var(--card); color:var(--ink);
+    font-size:13px; font-weight:600; padding:9px 16px; border-radius:999px;
+    transition:transform .15s, box-shadow .15s;
+  }
+  header .top-cta:hover { transform:translateY(-1px); box-shadow:0 10px 22px -12px rgba(42,36,32,.35); }
+
+  /* ---------- hero ---------- */
+  .hero { position:relative; text-align:center; padding:56px 0 40px; overflow:hidden; }
+  .hero::before {
+    content:""; position:absolute; inset:-40% -20% auto; height:120%;
+    background:
+      radial-gradient(46% 42% at 50% 0%, rgba(142,90,84,.10), transparent 70%),
+      radial-gradient(26% 30% at 84% 12%, rgba(201,162,75,.14), transparent 70%);
+    pointer-events:none;
+  }
+  .hero > * { position:relative; }
+  .kicker {
+    display:inline-flex; align-items:center; gap:12px;
+    font-size:11px; font-weight:600; letter-spacing:.3em; text-transform:uppercase;
+    color:var(--gold);
+  }
+  .kicker::before, .kicker::after { content:""; width:34px; height:1px; background:var(--gold-soft); }
+  .hero h2 {
+    font-family:"Noto Serif Thai",Georgia,serif;
+    font-size:clamp(34px,6.4vw,58px); font-weight:600; line-height:1.16;
+    letter-spacing:-.015em; margin-top:22px;
+  }
+  .hero h2 em { font-style:italic; color:var(--primary); position:relative; white-space:nowrap; }
+  .hero h2 em .u {
+    position:absolute; left:2%; right:2%; bottom:.02em; height:3px; border-radius:99px;
+    background:linear-gradient(90deg, transparent, var(--gold), transparent);
+    transform-origin:left; animation:sweep .8s .9s cubic-bezier(.16,1,.3,1) both;
+  }
+  .hero p { color:var(--muted); max-width:580px; margin:24px auto 0; font-size:15.5px; }
+  .hero .btns { display:flex; flex-wrap:wrap; gap:14px; justify-content:center; margin-top:32px; }
+  .btn {
+    display:inline-flex; align-items:center; gap:9px; border:none; border-radius:999px;
+    padding:14px 26px; font-size:15px; font-weight:600; font-family:inherit; cursor:pointer;
+    text-decoration:none; transition:transform .16s, box-shadow .16s;
+  }
+  .btn:hover { transform:translateY(-2px); }
+  .btn.primary {
+    background:linear-gradient(135deg,#a0685f,#7e4e49); color:var(--primary-ink);
+    box-shadow:0 14px 30px -14px rgba(126,78,73,.75);
+  }
+  .btn.primary:hover { box-shadow:0 20px 38px -14px rgba(126,78,73,.8); }
+  .btn.green { background:#06c755; color:#fff; box-shadow:0 14px 30px -14px rgba(6,199,85,.6); }
+  .btn.ghost { background:var(--card); color:var(--ink); border:1px solid var(--border); }
+  .btn.ghost:hover { box-shadow:0 12px 24px -14px rgba(42,36,32,.35); }
+  .btn svg { flex-shrink:0; }
+
+  /* stats hairline */
+  .stats { display:flex; max-width:640px; margin:38px auto 0; border-top:1px solid var(--line); }
+  .stats div { flex:1; padding:16px 8px 2px; text-align:center; }
+  .stats div + div { border-left:1px solid var(--line); }
+  .stats b { display:block; font-family:"Noto Serif Thai",Georgia,serif; font-size:22px; font-weight:600; }
+  .stats span { font-size:11.5px; color:var(--muted); }
+
+  /* ---------- cards ---------- */
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; padding:8px 0 26px; }
+  @media (max-width:720px){ .grid{grid-template-columns:1fr} .stats{flex-direction:column} .stats div+div{border-left:none;border-top:1px solid var(--line)} }
+  .card {
+    position:relative; background:var(--card); border:1px solid var(--border);
+    border-radius:22px; padding:26px; overflow:hidden;
+    transition:transform .2s, box-shadow .2s;
+  }
+  .card:hover { transform:translateY(-3px); box-shadow:0 24px 44px -26px rgba(42,36,32,.35); }
+  .card::after {
+    content:""; position:absolute; top:0; left:26px; right:26px; height:1px;
+    background:linear-gradient(90deg,transparent,var(--gold-soft),transparent);
+  }
+  .card .who {
+    font-size:10.5px; font-weight:600; letter-spacing:.24em; text-transform:uppercase;
+    color:var(--gold); margin-bottom:10px;
+  }
+  .card h3 { font-family:"Noto Serif Thai",Georgia,serif; font-size:20px; font-weight:600; letter-spacing:-.01em; }
+  .card ol { margin:12px 0 0 20px; font-size:14px; }
+  .card ol li { margin:8px 0; }
+  .card ol li::marker { color:var(--primary); font-weight:700; }
+  .card .sub { font-size:13px; color:var(--muted); margin-top:12px; }
+  .card .btns { display:flex; flex-wrap:wrap; gap:9px; margin-top:18px; }
+  .card .btn { padding:11px 18px; font-size:13.5px; }
+
+  /* ---------- privacy strip ---------- */
+  .strip {
+    background:linear-gradient(135deg,#f5eee3,#efe4d3);
+    border:1px solid var(--border); border-radius:20px; padding:20px 22px;
+    display:flex; gap:14px; align-items:flex-start; margin-bottom:34px;
+  }
+  .strip .ic {
+    flex-shrink:0; width:38px; height:38px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(142,90,84,.1); border:1px solid rgba(142,90,84,.18);
+  }
   .strip p { font-size:13.5px; }
   .strip b { color:var(--primary); }
-  footer { border-top:1px solid var(--border); padding:18px 0 30px; font-size:12.5px; color:var(--muted); text-align:center; }
+
+  /* ---------- dark band ---------- */
+  .band {
+    position:relative; overflow:hidden; background:#241e1a; color:#f6efe6;
+    border-radius:26px; padding:46px 26px; text-align:center; margin-bottom:34px;
+  }
+  .band::before {
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background:
+      radial-gradient(46% 62% at 50% 0%, rgba(142,90,84,.5), transparent 70%),
+      radial-gradient(26% 36% at 82% 90%, rgba(201,162,75,.2), transparent 70%);
+  }
+  .band > * { position:relative; }
+  .band .kicker { color:var(--gold); }
+  .band h2 {
+    font-family:"Noto Serif Thai",Georgia,serif;
+    font-size:clamp(24px,4.6vw,36px); font-weight:600; line-height:1.3; margin-top:14px;
+  }
+  .band h2 em { font-style:italic; color:var(--gold); }
+  .band p { font-size:14px; color:rgba(246,239,230,.75); margin-top:10px; }
+  .band .btn { margin-top:24px; background:#f6efe6; color:#241e1a; }
+  .band .btn:hover { box-shadow:0 18px 36px -14px rgba(0,0,0,.6); }
+
+  /* ---------- footer ---------- */
+  footer { border-top:1px solid var(--border); padding:22px 0 34px; font-size:12.5px; color:var(--muted); text-align:center; }
+  footer .fbrand { display:inline-flex; align-items:center; gap:7px; color:var(--ink); font-weight:600; text-decoration:none; }
   footer a { color:var(--ink); text-decoration:none; font-weight:600; }
+
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--primary); display:inline-block; animation:pulse 1.8s infinite; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <svg width="42" height="42" viewBox="0 0 512 512" aria-label="CameraSync" style="display:block">
-      <defs>
-        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#A0685F"/><stop offset="1" stop-color="#7E4E49"/>
-        </linearGradient>
-      </defs>
-      <rect width="512" height="512" rx="118" fill="url(#lg)"/>
-      <circle cx="256" cy="252" r="122" fill="none" stroke="#FAF7F2" stroke-width="24"/>
-      <circle cx="352" cy="180" r="26" fill="#E9C46A"/>
-      <path fill="#FAF7F2" d="M256 316 C 212 283 186 258 186 228 C 186 206 203 190 224 190 C 238 190 249 197 256 209 C 263 197 274 190 288 190 C 309 190 326 206 326 228 C 326 258 300 283 256 316 Z"/>
-    </svg>
-    <div>
-      <h1>CameraSync</h1>
-      <p>แกลเลอรีงานแต่งสด + ค้นหารูปด้วยเซลฟี่</p>
-    </div>
-  </header>
 
-  <section class="hero">
-    <span class="badge"><span class="dot"></span> ภาพขึ้นสดระหว่างงาน • สแกน QR ดูได้เลย • เจอรูปตัวเองใน 5 วินาที</span>
-    <h2>ภาพงานแต่งของคุณ<br><span>ออนไลน์ทันทีที่กดชัตเตอร์</span></h2>
-    <p>ระบบส่งรูปจากกล้องช่างภาพขึ้นแกลเลอรีให้เองระหว่างงาน แขกสแกน QR ดูรูปสด ๆ
-       และถ่ายเซลฟี่เพื่อหารูปของตัวเองได้ทันที — ครบจบในลิงก์เดียว</p>
-  </section>
-
-  <section class="grid">
-    <div class="card">
-      <div class="who">สำหรับแขกในงาน</div>
-      <h3>ได้ลิงก์หรือ QR จากงาน?</h3>
-      <ol>
-        <li>เปิดลิงก์ <b>/e/ชื่องาน</b> ที่ได้รับ (หรือสแกน QR บนโต๊ะ)</li>
-        <li>ดูรูปสด ๆ ระหว่างงาน — รูปใหม่ขึ้นเองตลอด</li>
-        <li>แท็บ "หารูปตัวเอง" → ถ่ายเซลฟี่ → เจอรูปที่มีคุณทั้งหมด ดาวน์โหลดได้เลย ไม่ต้องสมัคร ไม่ต้องติดแอป</li>
-      </ol>
-      <p class="sub">งานที่ตั้งรหัสจะขอ PIN สั้น ๆ ก่อนเข้าชม</p>
-    </div>
-
-    <div class="card">
-      <div class="who">สำหรับช่างภาพ / สตูดิโอ</div>
-      <h3>เริ่มใช้กับงานถัดไปของคุณ</h3>
-      <ol>
-        <li>ติดตั้งแอปบนเครื่องของคุณ (รูปทั้งหมดอยู่บนเครื่องคุณเสมอ)</li>
-        <li>เลือกโฟลเดอร์รูป (หรือ tether folder) แล้วกด "เริ่มเซิร์ฟเวอร์"</li>
-        <li>เชื่อมกับ hub นี้ — แขกได้ลิงก์ <b>sync.khunaistory.com/e/ชื่องาน</b> ทันที</li>
-      </ol>
-      <div class="btns">
-        <a class="btn" href="/download/CameraSync.dmg">⬇ ดาวน์โหลดแอป macOS</a>
-        <a class="btn green" href="/r/line/start">💬 เข้าสู่ระบบด้วย LINE</a>
-      </div>
-      <p class="sub">มีบัญชีจากแอดมินอยู่แล้ว? เปิดแอปแล้วกรอก username/password ได้เลย ไม่ต้องผ่านหน้าเว็บ</p>
-    </div>
-  </section>
-
-  <section class="strip">
-    <div class="ic">🛡️</div>
-    <p><b>ความเป็นส่วนตัวเต็มรูปแบบ:</b> รูปทุกใบเก็บอยู่บนเครื่องช่างภาพเท่านั้น —
-       เซิร์ฟเวอร์กลาง (hub) นี้<b>ไม่มีการเก็บไฟล์ภาพแม้แต่ไฟล์เดียว</b> ทำหน้าที่เพียงส่งต่อข้อมูลระหว่างงาน
-       และรูปเซลฟี่ที่ใช้ค้นหาก็ประมวลผลแล้วลบทิ้งทันที</p>
-  </section>
-
-  <footer>
-    <span style="display:inline-flex;align-items:center;gap:6px;vertical-align:-4px">
-      <svg width="18" height="18" viewBox="0 0 512 512" aria-hidden="true">
-        <rect width="512" height="512" rx="118" fill="#8e5a54"/>
+  <header class="rise">
+    <a class="brand" href="/" style="text-decoration:none;color:inherit">
+      <svg width="44" height="44" viewBox="0 0 512 512" aria-label="CameraSync" style="display:block">
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#A0685F"/><stop offset="1" stop-color="#7E4E49"/>
+          </linearGradient>
+        </defs>
+        <rect width="512" height="512" rx="118" fill="url(#lg)"/>
         <circle cx="256" cy="252" r="122" fill="none" stroke="#FAF7F2" stroke-width="24"/>
         <circle cx="352" cy="180" r="26" fill="#E9C46A"/>
         <path fill="#FAF7F2" d="M256 316 C 212 283 186 258 186 228 C 186 206 203 190 224 190 C 238 190 249 197 256 209 C 263 197 274 190 288 190 C 309 190 326 206 326 228 C 326 258 300 283 256 316 Z"/>
       </svg>
-      CameraSync
-    </span> — ขับเคลื่อนแกลเลอรีงานแต่งร่วมกับช่างภาพของงานคุณ<br>
-    <a href="/">หน้าแรก</a>
+      <div>
+        <h1>CameraSync</h1>
+        <p>แกลเลอรีงานแต่งสด · ค้นหารูปด้วยเซลฟี่</p>
+      </div>
+    </a>
+    <a class="top-cta" href="#start">
+      เริ่มใช้งาน
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </a>
+  </header>
+
+  <!-- hero -->
+  <section class="hero">
+    <span class="kicker rise d1">Live Wedding Gallery</span>
+    <h2 class="rise d2">ภาพงานแต่งของคุณ<br><em>ออนไลน์ทันที<span class="u"></span></em> ที่กดชัตเตอร์</h2>
+    <p class="rise d3">
+      ระบบส่งรูปจากกล้องขึ้นแกลเลอรีให้เองระหว่างงาน แขกสแกน QR ดูรูปสด ๆ
+      และถ่ายเซลฟี่เพื่อหารูปของตัวเองได้ทันที — ครบจบในลิงก์เดียว
+    </p>
+    <div class="btns rise d4">
+      <a class="btn primary" href="#start">
+        <svg width="17" height="17" viewBox="0 0 512 512" fill="none" aria-hidden="true"><circle cx="256" cy="252" r="122" stroke="#fdf9f4" stroke-width="34"/><circle cx="352" cy="180" r="30" fill="#E9C46A"/></svg>
+        เริ่มงานแรกของคุณ
+      </a>
+      <a class="btn ghost" href="#how">ดูวิธีทำงาน</a>
+    </div>
+    <div class="stats rise d5">
+      <div><b>~30 วินาที</b><span>รูปใหม่ถึงมือแขก</span></div>
+      <div><b>0 แอป</b><span>แขกไม่ต้องติดตั้ง</span></div>
+      <div><b>100%</b><span>ไฟล์เต็มคุณภาพ ไม่มีลายน้ำ</span></div>
+    </div>
+  </section>
+
+  <!-- how it works -->
+  <section id="how" class="rise d5" style="padding:26px 0 8px">
+    <span class="kicker" style="display:flex;justify-content:center">How it works</span>
+    <h2 class="serif" style="text-align:center;font-size:clamp(24px,4vw,34px);font-weight:600;margin-top:14px;letter-spacing:-.01em">
+      สามขั้นตอน <em style="font-style:italic;color:var(--primary)">ง่ายกว่าที่คิด</em>
+    </h2>
+    <div class="grid" style="margin-top:26px">
+      <div class="card rise d4">
+        <div class="who">สำหรับแขกในงาน</div>
+        <h3>ได้ลิงก์หรือ QR จากงาน?</h3>
+        <ol>
+          <li>เปิดลิงก์ <b>/e/ชื่องาน</b> ที่ได้รับ หรือสแกน QR บนโต๊ะ</li>
+          <li>ดูรูปสด ๆ ระหว่างงาน — รูปใหม่ขึ้นเองตลอด</li>
+          <li>แท็บ "หารูปตัวเอง" → ถ่ายเซลฟี่ → เจอรูปที่มีคุณทั้งหมด ดาวน์โหลดได้เลย</li>
+        </ol>
+        <p class="sub">ไม่ต้องสมัคร ไม่ต้องติดแอป ไม่ต้องขอเบอร์ใคร — เปิดลิงก์แล้วดูได้เลย</p>
+      </div>
+      <div class="card rise d5" id="start">
+        <div class="who">สำหรับช่างภาพ / สตูดิโอ</div>
+        <h3>เปิดแอป แล้วให้เราทำที่เหลือ</h3>
+        <ol>
+          <li>ติดตั้งแอป CameraSync บนเครื่องที่ถ่ายรูป (mac)</li>
+          <li>ล็อกอินครั้งเดียวด้วย LINE — ไม่ต้องกรอกอะไรอีกเลย</li>
+          <li>ชี้โฟลเดอร์รูปของงาน ระบบสร้างลิงก์ + QR ให้แขกอัตโนมัติ</li>
+        </ol>
+        <p class="sub">รูปทั้งหมดอยู่บนเครื่องคุณ — เราเป็นเพียงทางผ่าน ไม่มีไฟล์ภาพถูกเก็บบนเซิร์ฟเวอร์เด็ดขาด</p>
+        <div class="btns">
+          <a class="btn primary" href="/download/CameraSync.dmg">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+            ดาวน์โหลดแอป macOS
+          </a>
+          <a class="btn green" href="/r/line/start">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 5.69 2 10.25c0 4.14 3.56 7.56 8.37 8.16.33.07.77.22.88.5.1.25.07.65.03.9l-.15.88c-.04.25-.22.98.94.54 1.16-.45 6.26-3.69 8.54-6.32C21.46 13.53 22 11.94 22 10.25C22 5.69 17.52 2 12 2z"/></svg>
+            เริ่มใช้ด้วย LINE
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- privacy strip -->
+  <div class="strip rise d6">
+    <div class="ic">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8e5a54" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+    </div>
+    <p>
+      <b>ความเป็นส่วนตัวมาก่อนเสมอ</b> — รูปทุกไฟล์อยู่บนเครื่องช่างภาพ ระบบกลางเป็นเพียงทางผ่านของข้อมูล
+      ไม่มีไฟล์ภาพถูกบันทึกบนเซิร์ฟเวอร์ภายนอกแม้แต่ไฟล์เดียว และรูปเซลฟี่ที่ใช้ค้นหาก็ประมวลผลแล้วลบทิ้งทันที
+    </p>
+  </div>
+
+  <!-- dark CTA band -->
+  <section class="band rise d6">
+    <span class="kicker">พร้อมสำหรับงานถัดไป</span>
+    <h2>ให้ทุกช็อตของคืนนั้น<br><em>ไปถึงมือทุกคน</em> ในคืนเดียวกัน</h2>
+    <p>ดาวน์โหลดแอป ล็อกอินด้วย LINE แล้วเริ่มงานแรกได้เลยวันนี้</p>
+    <a class="btn" href="/download/CameraSync.dmg">เริ่มใช้งานฟรี</a>
+  </section>
+
+  <footer>
+    <p>
+      <a class="fbrand" href="/">
+        <svg width="17" height="17" viewBox="0 0 512 512" aria-hidden="true">
+          <rect width="512" height="512" rx="118" fill="#8e5a54"/>
+          <circle cx="256" cy="252" r="122" fill="none" stroke="#FAF7F2" stroke-width="24"/>
+          <circle cx="352" cy="180" r="26" fill="#E9C46A"/>
+          <path fill="#FAF7F2" d="M256 316 C 212 283 186 258 186 228 C 186 206 203 190 224 190 C 238 190 249 197 256 209 C 263 197 274 190 288 190 C 309 190 326 206 326 228 C 326 258 300 283 256 316 Z"/>
+        </svg>
+        CameraSync
+      </a>
+      — ขับเคลื่อนแกลเลอรีงานแต่งร่วมกับช่างภาพของงานคุณ · <a href="/">หน้าแรก</a>
+    </p>
   </footer>
+
 </div>
 </body>
 </html>

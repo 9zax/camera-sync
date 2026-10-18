@@ -112,6 +112,9 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
         .route("/r/line/callback", get(line_callback))
         .route("/r/line/poll", get(line_poll))
         .route("/r/line/start", get(line_web_start))
+        .route("/r/line/me", get(line_me_page))
+        .route("/r/line/slugs", get(line_my_slugs))
+        .route("/r/qr/{slug}", get(line_qr_png))
         .route("/r/connect/{id}", get(ws_connect))
         .route("/t/{id}/{*rest}", any(tunnel_entry))
         .route("/e/{slug}", any(guest_entry))
@@ -321,6 +324,176 @@ async fn session_user(st: &SharedHub, token: &str) -> Option<String> {
     row.map(|(u,)| u)
 }
 
+/// Browser session (cookie `cs_hub`, kind='web') issued by LINE login.
+async fn web_session_user(st: &SharedHub, headers: &HeaderMap) -> Option<String> {
+    let token = crate::util::parse_cookies(headers).get("cs_hub")?.to_string();
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT u.username FROM sessions s JOIN users u ON u.id = s.user_id \
+         WHERE s.token=?1 AND s.expires_at > ?2 AND s.kind='web'",
+    )
+    .bind(&token)
+    .bind(crate::util::now_ms())
+    .fetch_optional(&st.db)
+    .await
+    .ok()
+    .flatten();
+    row.map(|(u,)| u)
+}
+
+/// Slugs announced by this account's machine(s), newest tunnel first.
+async fn my_slugs(st: &SharedHub, username: &str) -> Vec<String> {
+    let mine = tunnel_id_for(username);
+    let map = st.slug_map.lock().await;
+    let mut slugs: Vec<String> = map
+        .iter()
+        .filter(|(_, t)| *t == &mine)
+        .map(|(s, _)| s.clone())
+        .collect();
+    slugs.sort();
+    slugs
+}
+
+#[derive(Deserialize)]
+struct SlugPath {
+    slug: String,
+}
+
+/// QR PNG of the public guest link — no auth (the slug is the guest secret).
+async fn line_qr_png(Path(p): Path<SlugPath>) -> Response {
+    let url = format!("/e/{}/", p.slug);
+    let Ok(code) = qrcode::QrCode::with_error_correction_level(
+        url.as_bytes(),
+        qrcode::EcLevel::M,
+    ) else {
+        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "qr failed").into_response();
+    };
+    let img = code
+        .render::<image::Rgba<u8>>()
+        .min_dimensions(720, 720)
+        .quiet_zone(true)
+        .dark_color(image::Rgba([28, 22, 18, 255]))
+        .light_color(image::Rgba([255, 252, 246, 255]))
+        .build();
+    let mut buf = std::io::Cursor::new(Vec::new());
+    if image::DynamicImage::ImageRgba8(img)
+        .write_to(&mut buf, image::ImageFormat::Png)
+        .is_err()
+    {
+        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "png failed").into_response();
+    }
+    (
+        [(axum::http::header::CONTENT_TYPE, "image/png")],
+        buf.into_inner(),
+    )
+        .into_response()
+}
+
+async fn line_my_slugs(State(st): State<SharedHub>, headers: HeaderMap) -> Response {
+    let Some(username) = web_session_user(&st, &headers).await else {
+        return crate::error::AppError::Unauthorized("กรุณาเข้าสู่ระบบด้วย LINE ก่อน".into())
+            .into_response();
+    };
+    let slugs = my_slugs(&st, &username).await;
+    Json(serde_json::json!({ "slugs": slugs })).into_response()
+}
+
+/// "งานของฉัน" — every guest QR this photographer has created, straight
+/// from the hub's live slug map (their machine announces them).
+async fn line_me_page(State(st): State<SharedHub>, headers: HeaderMap) -> Response {
+    let Some(username) = web_session_user(&st, &headers).await else {
+        return axum::response::Redirect::to("/r/line/start").into_response();
+    };
+    let slugs = my_slugs(&st, &username).await;
+    let base = hub_base_url(&headers);
+
+    let mut cards = String::new();
+    for slug in &slugs {
+        let url = format!("{base}/e/{slug}/");
+        cards.push_str(&format!(
+            r#"<div class="card">
+      <div class="qrbox"><img src="/r/qr/{slug}" alt="QR {slug}" loading="lazy"></div>
+      <div class="meta">
+        <h3>/{slug}/</h3>
+        <p class="url">{url}</p>
+        <div class="row">
+          <a class="btn" href="/r/qr/{slug}" download="CameraSync-{slug}-qr.png">ดาวน์โหลด QR</a>
+          <a class="btn ghost" href="/e/{slug}/" target="_blank" rel="noopener">เปิดหน้าแขก</a>
+          <button class="btn ghost" onclick="navigator.clipboard.writeText('{url}').then(()=>this.textContent='คัดลอกแล้ว ✓')">คัดลอกลิงก์</button>
+        </div>
+        <p class="hint">ปริ้น QR นี้แปะโต๊ะแขก หรือส่งลิงก์ให้ทีมงาน — แขกสแกนแล้วดูรูปได้เลย</p>
+      </div>
+    </div>"#
+        ));
+    }
+    let empty = if slugs.is_empty() {
+        r#"<div class="empty">
+      <p><b>ยังไม่มีงานบนหน้าเว็บ</b></p>
+      <p>เปิดแอป CameraSync บนเครื่องถ่ายรูป แล้วกด "เข้าสู่ระบบด้วย LINE" ด้วยบัญชีเดียวกันนี้ —
+         รายการงานและ QR จะขึ้นที่หน้านี้เองภายในไม่กี่วินาที</p>
+      <p class="hint">(หน้านี้รีเฟรชให้อัตโนมัติทุก 10 วินาที)</p>
+    </div>"#
+    } else {
+        ""
+    };
+    let reload = if slugs.is_empty() {
+        "<script>setTimeout(()=>location.reload(),10000)</script>"
+    } else {
+        ""
+    };
+    let me_count = if slugs.is_empty() {
+        String::new()
+    } else {
+        format!("{} งาน", slugs.len())
+    };
+    let html = format!(
+        r##"<!doctype html><html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>งานของฉัน — CameraSync</title>
+<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600&family=Noto+Serif+Thai:wght@600;700&display=swap" rel="stylesheet">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:Anuphan,system-ui,sans-serif;background:#faf7f2;color:#2a2420;line-height:1.6}}
+.wrap{{max-width:880px;margin:0 auto;padding:0 20px}}
+header{{display:flex;align-items:center;justify-content:space-between;padding:20px 0}}
+.brand{{display:flex;align-items:center;gap:11px;text-decoration:none;color:inherit}}
+.brand h1{{font-size:18px}}
+.kicker{{display:inline-flex;align-items:center;gap:10px;font-size:11px;font-weight:600;letter-spacing:.28em;text-transform:uppercase;color:#c9a24b}}
+.kicker::before,.kicker::after{{content:"";width:30px;height:1px;background:rgba(201,162,75,.35)}}
+h2.title{{font-family:"Noto Serif Thai",Georgia,serif;font-size:clamp(26px,4.6vw,38px);font-weight:600;margin:18px 0 6px;letter-spacing:-.01em}}
+.count{{color:#6f6760;font-size:14px}}
+.grid{{display:grid;gap:16px;margin-top:26px}}
+.card{{display:flex;gap:20px;background:#fffdf9;border:1px solid #e8dfd3;border-radius:20px;padding:20px;align-items:center;flex-wrap:wrap}}
+.card:hover{{box-shadow:0 20px 40px -24px rgba(42,36,32,.35)}}
+.qrbox img{{width:150px;height:150px;border-radius:14px;border:1px solid #e8dfd3;background:#fff;display:block}}
+.meta{{flex:1;min-width:230px}}
+.meta h3{{font-family:"Noto Serif Thai",Georgia,serif;font-size:18px;font-weight:600;word-break:break-all}}
+.url{{font-family:ui-monospace,monospace;font-size:12px;color:#6f6760;margin:4px 0 12px;word-break:break-all}}
+.row{{display:flex;gap:8px;flex-wrap:wrap}}
+.btn{{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:999px;padding:10px 16px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;text-decoration:none;background:linear-gradient(135deg,#a0685f,#7e4e49);color:#fdf9f4}}
+.btn.ghost{{background:#fffdf9;color:#2a2420;border:1px solid #e8dfd3}}
+.hint{{font-size:11.5px;color:#6f6760;margin-top:10px}}
+.empty{{background:#fffdf9;border:1px dashed #d8c9b8;border-radius:20px;padding:34px;text-align:center;margin-top:26px}}
+.empty p{{margin:6px 0}}
+footer{{border-top:1px solid #e8dfd3;margin-top:34px;padding:18px 0 30px;text-align:center;font-size:12.5px;color:#6f6760}}
+</style></head><body><div class="wrap">
+<header>
+  <a class="brand" href="/"><svg width="38" height="38" viewBox="0 0 512 512" style="display:block"><rect width="512" height="512" rx="118" fill="#8e5a54"/><circle cx="256" cy="252" r="122" fill="none" stroke="#FAF7F2" stroke-width="24"/><circle cx="352" cy="180" r="26" fill="#E9C46A"/><path fill="#FAF7F2" d="M256 316 C 212 283 186 258 186 228 C 186 206 203 190 224 190 C 238 190 249 197 256 209 C 263 197 274 190 288 190 C 309 190 326 206 326 228 C 326 258 300 283 256 316 Z"/></svg>
+  <div><h1>CameraSync</h1><p style="font-size:11.5px;color:#6f6760">งานของฉัน · {username}</p></div></a>
+</header>
+<span class="kicker">My Events</span>
+<h2 class="title">QR ทุกงานของคุณ <em style="font-style:italic;color:#8e5a54">ในหน้าเดียว</em></h2>
+<p class="count">{me_count} — รายการอัปเดตจากเครื่องที่เชื่อมต่ออยู่ของคุณ</p>
+<div class="grid">{cards}{empty}</div>
+<footer>CameraSync — รูปทั้งหมดอยู่บนเครื่องคุณ เราเป็นเพียงทางผ่าน · <a href="/" style="color:inherit;font-weight:600">หน้าแรก</a></footer>
+</div>{reload}</body></html>"##
+    );
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        html,
+    )
+        .into_response()
+}
+
 // ---------- LINE Login (hub auth สำหรับช่างภาพ) ----------
 
 fn line_config() -> Option<(String, String)> {
@@ -473,7 +646,7 @@ async fn line_callback(
     let Some(line_user_id) = profile["userId"].as_str() else {
         return line_html_page(false, "LINE ไม่คืน userId");
     };
-    let display = profile["displayName"].as_str().unwrap_or("ช่างภาพ");
+    let _display = profile["displayName"].as_str().unwrap_or("ช่างภาพ");
 
     // upsert local account for this LINE user (password unusable — LINE-only)
     let username = format!("line:{line_user_id}");
@@ -514,7 +687,23 @@ async fn line_callback(
     }
     drop(map);
 
-    line_html_page(true, &format!("สวัสดี {display} — กลับไปที่แอป CameraSync ได้เลย ระบบกำลังเชื่อมต่อให้อัตโนมัติ"))
+    // web session so /r/line/me can list this photographer's QR codes
+    let web_token = crate::util::random_token();
+    let web_ttl = 30 * 24 * 3600 * 1000i64;
+    let _ = sqlx::query("INSERT INTO sessions(token, user_id, kind, expires_at) VALUES (?1,?2,'web',?3)")
+        .bind(&web_token)
+        .bind(&user_id)
+        .bind(crate::util::now_ms() + web_ttl)
+        .execute(&st.db)
+        .await;
+    let mut res = axum::response::Redirect::to("/r/line/me").into_response();
+    if let Ok(v) = axum::http::HeaderValue::from_str(&format!(
+        "cs_hub={web_token}; Path=/; SameSite=Lax; Max-Age={}",
+        30 * 24 * 3600
+    )) {
+        res.headers_mut().append(axum::http::header::SET_COOKIE, v);
+    }
+    res
 }
 
 #[derive(Deserialize)]
