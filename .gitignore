@@ -7,3 +7,4 @@ hub-data
 *.zip
 .DS_Store
 *.linux-arm64
+/target-linux

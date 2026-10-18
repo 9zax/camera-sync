@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo.svg" width="96" alt="CameraSync logo" /></p>
+
 # CameraSync — Wedding Photo Drive
 
 ![Architecture](docs/arch.png)

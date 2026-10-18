@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
 import { AnimatePresence, motion, useAnimate, type Variants } from "motion/react"
-import { Aperture, CalendarDays, Heart, Images, Loader2, Lock, ScanFace, Sparkles } from "lucide-react"
+import { CalendarDays, Heart, Images, Loader2, Lock, ScanFace, Sparkles } from "lucide-react"
+import { LogoMark } from "@/components/Logo"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -256,7 +257,7 @@ export default function GuestEvent() {
         <p className="flex items-center justify-center gap-1.5">
           <Heart className="size-3.5 text-primary" /> ขับเคลื่อนโดย
           <Link to="/" className="inline-flex items-center gap-1 font-medium text-foreground">
-            <Aperture className="size-3.5" /> CameraSync
+            <LogoMark size={16} /> CameraSync
           </Link>
         </p>
         <p className="mt-2 flex items-center justify-center gap-1">

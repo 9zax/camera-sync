@@ -1,8 +1,7 @@
-//! CameraSync desktop app (Tauri)
+//! CameraSync desktop app (Tauri) — zero-input UX
 //!
-//! หลักการ: เครื่องช่างภาพ = ที่เก็บรูปทั้งหมด (disk ตัวเอง เปิดไว้ตลอด)
-//! App นี้ embed photo-drive server ทั้งตัวไว้ในเครื่อง + เชื่อม tunnel ไป hub
-//! ของระบบเรา — hub ดึงภาพจากเครื่องนี้แบบ realtime โดยไม่เก็บภาพบน hub เด็ดขาด
+//! เปิดแอป = เซิร์ฟเวอร์เริ่มเอง (รูปอยู่เครื่องนี้ทั้งหมด) เหลือแค่กดปุ่มเดียว
+//! "เข้าสู่ระบบด้วย LINE" แล้วระบบต่อ hub + แสดงลิงก์แขกให้ทันที
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -16,173 +15,126 @@ fn rt() -> &'static tokio::runtime::Runtime {
     RUNTIME.get_or_init(|| tokio::runtime::Runtime::new().expect("create tokio runtime"))
 }
 
-fn default_data_dir() -> std::path::PathBuf {
+fn home() -> std::path::PathBuf {
     std::env::var("HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::path::PathBuf::from("."))
-        .join(".camerasync")
+}
+
+fn default_data_dir() -> std::path::PathBuf {
+    home().join(".camerasync")
+}
+
+fn default_import_dir() -> std::path::PathBuf {
+    home().join("Pictures").join("CameraSync-Inbox")
 }
 
 #[derive(Default)]
 struct App {
     port: RwLock<Option<u16>>,
-    import_dir: RwLock<Option<String>>,
-    data_dir: RwLock<String>,
     hub_url: RwLock<String>,
-    hub_user: RwLock<String>,
     tunnel_status: RwLock<String>,
+    line_user: RwLock<String>,
 }
 
-impl App {
-    fn data_path(&self) -> std::path::PathBuf {
-        let dir = self.data_dir.read().unwrap().clone();
-        if dir.is_empty() {
-            default_data_dir()
-        } else {
-            std::path::PathBuf::from(dir)
-        }
-    }
+#[derive(Serialize)]
+struct EventLink {
+    slug: String,
+    title: String,
 }
 
 #[derive(Serialize)]
 struct Status {
     server_running: bool,
     port: Option<u16>,
-    data_dir: String,
-    import_dir: Option<String>,
     hub_url: String,
-    hub_user: String,
     tunnel_status: String,
-    local_url: Option<String>,
+    line_user: String,
+    events: Vec<EventLink>,
+    guest_base: String,
+    local_admin: Option<(String, String)>,
+    import_dir: String,
+}
+
+impl App {
+    fn hub(&self) -> String {
+        let h = self.hub_url.read().unwrap().clone();
+        if h.is_empty() {
+            wedsync_server::default_hub()
+        } else {
+            h
+        }
+    }
+}
+
+fn guest_base(hub: &str) -> String {
+    let mut base = hub
+        .trim()
+        .replacen("wss://", "https://", 1)
+        .replacen("ws://", "http://", 1);
+    while base.ends_with('/') {
+        base.pop();
+    }
+    base
+}
+
+async fn collect_events() -> Vec<EventLink> {
+    let Some(st) = wedsync_server::server_state() else {
+        return vec![];
+    };
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT slug, title FROM events ORDER BY created_at DESC")
+            .fetch_all(&st.pool)
+            .await
+            .unwrap_or_default();
+    rows.into_iter()
+        .map(|(slug, title)| EventLink { slug, title })
+        .collect()
+}
+
+fn read_local_admin() -> Option<(String, String)> {
+    let s = std::fs::read_to_string(default_data_dir().join("local-admin.txt")).ok()?;
+    let mut it = s.trim().splitn(2, " / ");
+    let u = it.next()?.to_string();
+    let p = it.next()?.trim().to_string();
+    if u.is_empty() || p.is_empty() {
+        None
+    } else {
+        Some((u, p))
+    }
 }
 
 #[tauri::command]
-fn get_status(app: State<'_, App>) -> Status {
+async fn get_status(app: State<'_, App>) -> Result<Status, String> {
     let port = *app.port.read().unwrap();
-    let import = app.import_dir.read().unwrap().clone();
-    let data = app.data_dir.read().unwrap().clone();
-    let hub = app.hub_url.read().unwrap().clone();
-    let user = app.hub_user.read().unwrap().clone();
-    let tunnel = app.tunnel_status.read().unwrap().clone();
-    Status {
+    let hub = app.hub();
+    let tunnel = {
+        let t = app.tunnel_status.read().unwrap().clone();
+        if t.is_empty() { "ยังไม่เชื่อมต่อ".to_string() } else { t }
+    };
+    let line_user = app.line_user.read().unwrap().clone();
+    let events = collect_events().await;
+    let admin = read_local_admin();
+    Ok(Status {
         server_running: port.is_some(),
         port,
-        data_dir: if data.is_empty() {
-            default_data_dir().display().to_string()
-        } else {
-            data
-        },
-        import_dir: import,
-        hub_url: hub,
-        hub_user: user,
-        tunnel_status: if tunnel.is_empty() { "ยังไม่เชื่อมต่อ".into() } else { tunnel },
-        local_url: port.map(|p| format!("http://localhost:{p}")),
-    }
+        tunnel_status: tunnel,
+        line_user,
+        hub_url: hub.clone(),
+        events,
+        guest_base: guest_base(&hub),
+        local_admin: admin,
+        import_dir: default_import_dir().display().to_string(),
+    })
 }
 
 #[tauri::command]
-async fn pick_import_folder(
-    app: AppHandle,
-    state: State<'_, App>,
-) -> Result<Option<String>, String> {
-    use tauri_plugin_dialog::DialogExt;
-    // async command runs off the main thread; the dialog must render on the
-    // main event loop, so use the callback API instead of the blocking one
-    // (blocking_pick_folder here deadlocks the main thread → app freeze).
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog().file().pick_folder(move |file| {
-        let _ = tx.send(file.map(|p| p.to_string()));
-    });
-    let folder: Option<String> = rx.await.map_err(|e| e.to_string())?;
-    if let Some(ref f) = folder {
-        *state.import_dir.write().unwrap() = Some(f.clone());
-    }
-    Ok(folder)
-}
-
-#[tauri::command]
-fn start_server(app: State<'_, App>, import_dir: Option<String>) -> Result<u16, String> {
-    if app.port.read().unwrap().is_some() {
-        return Err("เซิร์ฟเวอร์กำลังทำงานอยู่แล้ว".into());
-    }
-    if let Some(ref d) = import_dir {
-        *app.import_dir.write().unwrap() = Some(d.clone());
-    }
-    // pick a free port between 8080–8089
-    let mut port = None;
-    for p in 8080..8090 {
-        if std::net::TcpListener::bind(("127.0.0.1", p)).is_ok() {
-            port = Some(p);
-            break;
-        }
-    }
-    let port = port.ok_or_else(|| "หาพอร์ตว่าง (8080–8089) ไม่ได้".to_string())?;
-    *app.port.write().unwrap() = Some(port);
-
-    let data_dir = app.data_path();
-    rt().spawn(async move {
-        if let Err(e) = wedsync_server::run_server(data_dir, port, import_dir.map(Into::into), None).await {
-            eprintln!("server stopped: {e:#}");
-        }
-    });
-    Ok(port)
-}
-
-#[derive(serde::Deserialize)]
-struct HubParams {
-    url: String,
-    user: String,
-    pass: String,
-}
-
-#[tauri::command]
-async fn register_hub(app: State<'_, App>, params: HubParams) -> Result<String, String> {
-    let r = wedsync_agent::hub_register(&params.url, &params.user, &params.pass)
-        .await
-        .map_err(|e| format!("สมัครไม่สำเร็จ: {e}"))?;
-    *app.hub_url.write().unwrap() = params.url;
-    *app.hub_user.write().unwrap() = params.user;
-    Ok(r)
-}
-
-#[tauri::command]
-async fn connect_hub(app: State<'_, App>, params: HubParams) -> Result<String, String> {
-    let port = *app.port.read().unwrap();
-    let Some(port) = port else {
-        return Err("เริ่มเซิร์ฟเวอร์ในเครื่องก่อน (กดปุ่มเริ่มด้านบน)".into());
-    };
-    // fail fast on bad credentials
-    let tunnel_id = wedsync_agent::hub_validate(&params.url, &params.user, &params.pass)
-        .await
-        .map_err(|e| format!("ล็อกอิน hub ไม่สำเร็จ: {e}"))?;
-
-    *app.hub_url.write().unwrap() = params.url.clone();
-    *app.hub_user.write().unwrap() = params.user.clone();
-    *app.tunnel_status.write().unwrap() = "กำลังเชื่อมต่อ hub…".into();
-
-    let cfg = wedsync_agent::TunnelConfig {
-        server: format!("http://localhost:{port}"),
-        relay: params.url,
-        id: None,
-        user: Some(params.user),
-        pass: Some(params.pass),
-        machine: None,
-    };
-    rt().spawn(async move {
-        let status_cb: wedsync_agent::StatusCb = Arc::new(|_| {});
-        if let Err(e) = wedsync_agent::run_tunnel_forever_status(cfg, status_cb).await {
-            eprintln!("tunnel stopped: {e:#}");
-        }
-    });
-    Ok(tunnel_id)
-}
-
-#[tauri::command]
-async fn line_login(app: AppHandle, state: State<'_, App>, hub_url: String) -> Result<String, String> {
-    let (state_key, url) = wedsync_agent::line_login_begin(&hub_url)
+async fn line_login(app: AppHandle, state: State<'_, App>) -> Result<String, String> {
+    let hub = state.hub();
+    let (state_key, url) = wedsync_agent::line_login_begin(&hub)
         .await
         .map_err(|e| format!("เริ่ม LINE Login ไม่สำเร็จ: {e}"))?;
-    *state.hub_url.write().unwrap() = hub_url;
+    *state.hub_url.write().unwrap() = hub;
     use tauri_plugin_opener::OpenerExt;
     app.opener()
         .open_url(url, None::<&str>)
@@ -191,34 +143,60 @@ async fn line_login(app: AppHandle, state: State<'_, App>, hub_url: String) -> R
 }
 
 #[tauri::command]
-async fn line_connect(app: State<'_, App>, state_key: String) -> Result<String, String> {
-    let port = *app.port.read().unwrap();
+async fn line_connect(app: AppHandle, state: State<'_, App>, state_key: String) -> Result<String, String> {
+    let port = *state.port.read().unwrap();
     let Some(port) = port else {
-        return Err("เริ่มเซิร์ฟเวอร์ในเครื่องก่อน (กดปุ่มเริ่มด้านบน)".into());
+        return Err("เซิร์ฟเวอร์กำลังเริ่มต้น ลองอีกครั้งในสักครู่".into());
     };
-    let hub_url = app.hub_url.read().unwrap().clone();
-    *app.tunnel_status.write().unwrap() = "รอยืนยันใน LINE…".into();
+    let hub = state.hub();
+    *state.hub_url.write().unwrap() = hub.clone();
+    *state.tunnel_status.write().unwrap() = "รอยืนยันใน LINE…".into();
 
-    let creds = wedsync_agent::line_login_wait(&hub_url, &state_key)
+    let creds = wedsync_agent::line_login_wait(&hub, &state_key)
         .await
         .map_err(|e| format!("LINE Login ไม่สำเร็จ: {e}"))?;
 
+    *state.line_user.write().unwrap() = creds.tunnel_id.clone();
+    *state.tunnel_status.write().unwrap() = "กำลังเชื่อมต่อ hub…".into();
+
     let cfg = wedsync_agent::TunnelConfig {
         server: format!("http://localhost:{port}"),
-        relay: hub_url,
+        relay: hub,
         id: None,
         user: None,
         pass: None,
         machine: Some(creds.clone()),
     };
-    *app.tunnel_status.write().unwrap() = "กำลังเชื่อมต่อ hub…".into();
+    let app_handle = app.clone();
+    let status_cb: wedsync_agent::StatusCb = Arc::new(move |s: &str| {
+        if let Some(state) = app_handle.try_state::<App>() {
+            *state.tunnel_status.write().unwrap() = s.to_string();
+        }
+        let _ = app_handle.emit("tunnel-status", s);
+    });
     rt().spawn(async move {
-        let status_cb: wedsync_agent::StatusCb = Arc::new(|_| {});
         if let Err(e) = wedsync_agent::run_tunnel_forever_status(cfg, status_cb).await {
             eprintln!("tunnel stopped: {e:#}");
         }
     });
     Ok(creds.tunnel_id)
+}
+
+#[tauri::command]
+async fn add_photo_folder(app: AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |file| {
+        let _ = tx.send(file.map(|p| p.to_string()));
+    });
+    let folder: Option<String> = rx.await.map_err(|e| e.to_string())?;
+    let Some(folder) = folder else {
+        return Ok(None);
+    };
+    wedsync_server::add_import_dir(folder.clone().into(), None)
+        .await
+        .map_err(|e| format!("เพิ่มโฟลเดอร์ไม่สำเร็จ: {e}"))?;
+    Ok(Some(folder))
 }
 
 #[tauri::command]
@@ -234,14 +212,39 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(App::default())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            // auto-start the embedded photo-drive server (zero-input)
+            rt().spawn(async move {
+                let mut port = None;
+                for p in 8080..8090 {
+                    if std::net::TcpListener::bind(("127.0.0.1", p)).is_ok() {
+                        port = Some(p);
+                        break;
+                    }
+                }
+                let Some(port) = port else {
+                    eprintln!("no free port 8080-8089");
+                    return;
+                };
+                if let Some(state) = handle.try_state::<App>() {
+                    *state.port.write().unwrap() = Some(port);
+                }
+                let import = default_import_dir();
+                std::fs::create_dir_all(&import).ok();
+                if let Err(e) =
+                    wedsync_server::run_server(default_data_dir(), port, Some(import), None).await
+                {
+                    eprintln!("server stopped: {e:#}");
+                }
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_status,
-            pick_import_folder,
-            start_server,
-            register_hub,
-            connect_hub,
             line_login,
             line_connect,
+            add_photo_folder,
             open_in_browser,
         ])
         .run(tauri::generate_context!())

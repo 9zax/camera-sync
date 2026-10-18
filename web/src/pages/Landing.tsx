@@ -8,7 +8,6 @@ import {
   type Variants,
 } from "motion/react"
 import {
-  Aperture,
   ArrowRight,
   Camera,
   CloudUpload,
@@ -24,6 +23,7 @@ import {
   Zap,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Logo, LogoMark } from "@/components/Logo"
 
 const container: Variants = {
   hidden: {},
@@ -90,11 +90,8 @@ export default function Landing() {
       {/* nav */}
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-          <Link to="/" className="flex items-center gap-2.5">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <Aperture className="size-5" />
-            </span>
-            <span className="font-display text-xl font-semibold tracking-tight">CameraSync</span>
+          <Link to="/">
+            <Logo size={38} />
           </Link>
           <div className="flex items-center gap-2">
             <a href="#how" className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:block">
@@ -259,8 +256,8 @@ export default function Landing() {
       </section>
 
       <footer className="border-t border-border/60 py-8 text-center text-sm text-muted-foreground">
-        <p className="flex items-center justify-center gap-1.5">
-          <Aperture className="size-4 text-primary" /> CameraSync — แกลเลอรีงานแต่งสด + ค้นหารูปด้วยเซลฟี่
+        <p className="flex items-center justify-center gap-2">
+          <LogoMark size={20} /> CameraSync — แกลเลอรีงานแต่งสด + ค้นหารูปด้วยเซลฟี่
         </p>
       </footer>
     </div>

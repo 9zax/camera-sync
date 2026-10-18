@@ -15,6 +15,7 @@
         --border: #e7dfd5;
         --ok: #0f9d58;
         --warn: #b26a00;
+        --line: #06c755;
       }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
@@ -24,14 +25,9 @@
         padding: 22px 20px 30px;
         -webkit-font-smoothing: antialiased;
       }
-      header { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
-      .logo {
-        width: 36px; height: 36px; border-radius: 11px;
-        background: var(--primary); color: var(--primary-ink);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 19px;
-      }
-      header h1 { font-size: 19px; font-weight: 700; }
+      header { display: flex; align-items: center; gap: 11px; margin-bottom: 18px; }
+      header svg { display: block; }
+      header h1 { font-size: 19px; font-weight: 700; letter-spacing: -.01em; }
       header p { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
 
       .card {
@@ -39,232 +35,261 @@
         border-radius: 16px; padding: 16px; margin-bottom: 14px;
       }
       .card h2 { font-size: 14.5px; margin-bottom: 3px; }
-      .card .sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
-      .row { display: flex; gap: 8px; margin-bottom: 8px; }
-      .row:last-child { margin-bottom: 0; }
-
-      input[type=text], input[type=password] {
-        flex: 1; width: 100%; border: 1px solid var(--border); border-radius: 10px;
-        padding: 9px 11px; font-size: 13px; font-family: inherit; background: #fffdfb;
-        color: var(--ink); outline: none;
-      }
-      input:focus { border-color: var(--primary); }
+      .card .sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.55; }
 
       button {
-        border: none; border-radius: 10px; padding: 9px 14px; font-size: 13px;
-        font-family: inherit; font-weight: 600; cursor: pointer; color: var(--primary-ink);
+        border: none; border-radius: 12px; padding: 12px 16px; font-size: 14px;
+        font-family: inherit; font-weight: 700; cursor: pointer; color: var(--primary-ink);
         background: var(--primary); transition: transform .12s ease, opacity .12s;
       }
-      button:hover { transform: translateY(-1px); }
-      button:active { transform: scale(.97); }
-      button.secondary { background: #f0e8dd; color: var(--ink); }
+      button:hover:not(:disabled) { transform: translateY(-1px); }
+      button:active:not(:disabled) { transform: scale(.97); }
+      button.secondary { background: #f0e8dd; color: var(--ink); font-weight: 600; padding: 9px 14px; font-size: 13px; }
       button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
-      button.link { background: none; color: var(--primary); padding: 4px 6px; font-weight: 600; }
+      #lineBtn {
+        width: 100%; background: var(--line); color: #fff; font-size: 15.5px;
+        padding: 14px 16px; display: flex; align-items: center; justify-content: center; gap: 9px;
+      }
+      #lineBtn svg { flex-shrink: 0; }
 
-      .status { display: flex; align-items: center; gap: 7px; font-size: 12.5px; margin: 10px 0; }
-      .dot { width: 9px; height: 9px; border-radius: 50%; background: #c9c2b8; }
+      .status { display: flex; align-items: center; gap: 7px; font-size: 12.5px; margin: 10px 0 0; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: #c9c2b8; flex-shrink: 0; }
       .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(15,157,88,.15); }
       .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(178,106,0,.15); }
 
-      .pill {
-        display: inline-flex; align-items: center; gap: 6px; background: #f4ede3;
-        border-radius: 999px; padding: 5px 11px; font-size: 12px; color: var(--ink);
+      .err { color: #b3261e; font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
+
+      .link-row {
+        display: flex; align-items: center; gap: 8px; padding: 9px 0;
+        border-top: 1px solid var(--border);
       }
-      .url { font-family: ui-monospace, monospace; font-size: 12px; }
+      .link-row:first-of-type { border-top: none; }
+      .link-row .t { flex: 1; min-width: 0; }
+      .link-row .t b { display: block; font-size: 13px; }
+      .link-row .t span {
+        display: block; font-family: ui-monospace, monospace; font-size: 11px;
+        color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .link-row button { padding: 7px 11px; font-size: 12px; border-radius: 9px; }
+
+      details.adv { margin-top: 4px; }
+      details.adv summary {
+        cursor: pointer; font-size: 12px; color: var(--muted); padding: 6px 0;
+        user-select: none; list-style: none;
+      }
+      details.adv summary::before { content: "▸ "; }
+      details.adv[open] summary::before { content: "▾ "; }
+      details.adv .inner { padding-top: 6px; }
+      .kv { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 4px 0; }
+      .kv span:first-child { color: var(--muted); flex-shrink: 0; }
+      .kv span:last-child { font-family: ui-monospace, monospace; text-align: right; word-break: break-all; }
 
       .note {
-        font-size: 11.5px; color: var(--muted); line-height: 1.6;
-        border-top: 1px dashed var(--border); margin-top: 14px; padding-top: 10px;
+        font-size: 11.5px; color: var(--muted); line-height: 1.6; text-align: center;
       }
-      label.chk { display: flex; gap: 7px; align-items: center; font-size: 12.5px; margin: 4px 0 10px; color: var(--muted); }
-      .err { color: #b3261e; font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
-      .ok-msg { color: var(--ok); font-size: 12px; margin-top: 8px; }
-      .divider { height: 1px; background: var(--border); margin: 12px 0; }
+      .toast {
+        position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%) translateY(6px);
+        background: #2a2420; color: #fdf9f4; font-size: 12.5px; padding: 9px 16px;
+        border-radius: 999px; opacity: 0; pointer-events: none;
+        transition: opacity .2s ease, transform .2s ease;
+      }
+      .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     </style>
   </head>
   <body>
     <header>
-      <div class="logo">◉</div>
+      <svg width="40" height="40" viewBox="0 0 512 512" aria-label="CameraSync">
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#A0685F"/><stop offset="1" stop-color="#7E4E49"/>
+          </linearGradient>
+        </defs>
+        <rect width="512" height="512" rx="118" fill="url(#lg)"/>
+        <circle cx="256" cy="252" r="122" fill="none" stroke="#FAF7F2" stroke-width="24"/>
+        <circle cx="352" cy="180" r="26" fill="#E9C46A"/>
+        <path fill="#FAF7F2" d="M256 316 C 212 283 186 258 186 228 C 186 206 203 190 224 190 C 238 190 249 197 256 209 C 263 197 274 190 288 190 C 309 190 326 206 326 228 C 326 258 300 283 256 316 Z"/>
+      </svg>
       <div>
         <h1>CameraSync</h1>
-        <p>เครื่องช่างภาพของคุณ = ที่เก็บรูปทั้งหมด เปิดไว้ตลอดงาน</p>
+        <p>เปิดไว้ตลอดงาน — รูปอยู่บนเครื่องนี้ แขกดูผ่านลิงก์ได้เลย</p>
       </div>
     </header>
 
-    <!-- 1) local server -->
+    <!-- status -->
     <div class="card">
-      <h2>1 · เซิร์ฟเวอร์บนเครื่องนี้</h2>
-      <p class="sub">
-        รูปทั้งหมดอยู่บนดิสก์เครื่องนี้ (ไม่มีการอัปโหลดไปเก็บที่อื่น)
-        ชี้โฟลเดอร์รูป เช่น tether folder ของ Lightroom แล้วกดเริ่ม
-      </p>
-      <div class="row">
-        <input type="text" id="importDir" placeholder="โฟลเดอร์รูป (optional — ระบบจะอ่านรูปใหม่ให้อัตโนมัติ)" />
-        <button class="secondary" id="pickBtn">เลือก…</button>
-      </div>
-      <div class="row">
-        <button id="startBtn" style="flex:1">▶ เริ่มเซิร์ฟเวอร์</button>
-        <button class="secondary" id="adminBtn" disabled>เปิดหน้าจัดการ</button>
-      </div>
-      <div class="status"><span class="dot" id="srvDot"></span><span id="srvText">ยังไม่เริ่ม</span></div>
-      <div class="pill" id="srvUrl" style="display:none"></div>
+      <h2>สถานะเครื่องนี้</h2>
+      <p class="sub" id="srvSub">กำลังเริ่มเซิร์ฟเวอร์ในเครื่อง…</p>
+      <div class="status"><span class="dot warn" id="srvDot"></span><span id="srvText">กำลังเริ่ม…</span></div>
+      <div class="status"><span class="dot" id="hubDot"></span><span id="hubText">ยังไม่เชื่อมต่อ hub</span></div>
     </div>
 
-    <!-- 2) hub -->
-    <div class="card">
-      <h2>2 · เชื่อมกับระบบกลาง (hub)</h2>
+    <!-- one-click LINE login -->
+    <div class="card" id="loginCard">
+      <h2>เริ่มใช้งานด้วยปุ่มเดียว</h2>
       <p class="sub">
-        ใส่ hub ของระบบเรา — hub จะ<b>ดึงภาพจากเครื่องนี้แบบ realtime</b>
-        ไปให้แขกดู แต่<b>ไม่เก็บภาพบน hub เด็ดขาด</b> แขกได้ลิงก์สวย ๆ
-        <span class="url">hub/e/ชื่องาน</span>
+        กดปุ่มนี้ แล้วยืนยันตัวตนในหน้า LINE ที่เปิดขึ้นมา —
+        ระบบจะต่อเครื่องนี้เข้ากับลิงก์แขกของคุณทันที
       </p>
-      <div class="row">
-        <input type="text" id="hubUrl" placeholder="wss://hub.example.com:9000" />
-      </div>
-      <div class="row">
-        <input type="text" id="hubUser" placeholder="username" autocomplete="off" />
-      </div>
-      <div class="row">
-        <input type="password" id="hubPass" placeholder="password" />
-      </div>
-      <label class="chk">
-        <input type="checkbox" id="regChk" /> สมัครบัญชีใหม่กับ hub นี้ (ครั้งแรก)
-      </label>
-      <div class="row">
-        <button id="lineBtn" class="secondary" style="flex:1;background:#06c755;color:#fff">💬 เข้าสู่ระบบด้วย LINE</button>
-      </div>
-      <div class="divider" style="text-align:center;font-size:11px;color:var(--muted)">หรือใช้บัญชี hub</div>
-      <div class="row">
-        <button id="hubBtn" style="flex:1">⇄ เชื่อมต่อ hub</button>
-      </div>
-      <div class="status"><span class="dot" id="hubDot"></span><span id="hubText">ยังไม่เชื่อมต่อ</span></div>
-      <div class="err" id="hubErr" style="display:none"></div>
-      <div class="ok-msg" id="hubOk" style="display:none"></div>
+      <button id="lineBtn">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 5.69 2 10.25c0 4.14 3.56 7.56 8.37 8.16.33.07.77.22.88.5.1.25.07.65.03.9l-.15.88c-.04.25-.22.98.94.54 1.16-.45 6.26-3.69 8.54-6.32C21.46 13.53 22 11.94 22 10.25C22 5.69 17.52 2 12 2zM8.4 13.4H6.9a.4.4 0 0 1-.4-.4V8.9c0-.22.18-.4.4-.4s.4.18.4.4v3.7h1.1a.4.4 0 0 1 0 .8zm2.3-.4c0 .22-.18.4-.4.4a.4.4 0 0 1-.4-.4V8.9c0-.22.18-.4.4-.4s.4.18.4.4v4.1zm4.2 0c0 .17-.11.32-.27.38a.4.4 0 0 1-.45-.14l-1.53-2.07v1.83c0 .22-.18.4-.4.4a.4.4 0 0 1-.4-.4V8.9c0-.17.11-.32.27-.38a.4.4 0 0 1 .45.14l1.53 2.07V8.9c0-.22.18-.4.4-.4s.4.18.4.4v4.1zm2.4-2.9c.22 0 .4.18.4.4s-.18.4-.4.4h-1.1v.7h1.1a.4.4 0 0 1 0 .8h-1.5a.4.4 0 0 1-.4-.4V8.9c0-.22.18-.4.4-.4h1.5c.22 0 .4.18.4.4s-.18.4-.4.4h-1.1v.7h1.1z"/></svg>
+        เข้าสู่ระบบด้วย LINE
+      </button>
+      <div class="err" id="lineErr" style="display:none"></div>
+    </div>
+
+    <!-- guest links (after connect) -->
+    <div class="card" id="linksCard" style="display:none">
+      <h2>ลิงก์สำหรับแขก</h2>
+      <p class="sub">ส่งลิงก์นี้ให้ทีมงาน เพื่อทำ QR ให้แขกสแกน หรือแปะไว้ที่หน้างาน</p>
+      <div id="links"></div>
+    </div>
+
+    <!-- add folder -->
+    <div class="card">
+      <h2>เพิ่มรูปจากโฟลเดอร์</h2>
+      <p class="sub" id="importSub">เลือกโฟลเดอร์รูปของงาน (เช่น tether folder ของ Lightroom) — ระบบอ่านรูปใหม่ให้อัตโนมัติเรื่อย ๆ</p>
+      <button class="secondary" id="addBtn">＋ เลือกโฟลเดอร์รูป</button>
+    </div>
+
+    <!-- advanced -->
+    <div class="card">
+      <details class="adv">
+        <summary>ข้อมูลสำหรับแอดมิน (กดเพื่อเปิด)</summary>
+        <div class="inner">
+          <div class="kv"><span>หน้าจัดการเครื่องนี้</span><span id="adminUrl">—</span></div>
+          <div class="kv"><span>บัญชีภายใน</span><span id="adminCred">—</span></div>
+          <div class="kv"><span>โฟลเดอร์รอรูป</span><span id="importDir">—</span></div>
+          <div class="kv"><span>hub</span><span id="hubUrl">—</span></div>
+          <button class="secondary" id="adminBtn" style="margin-top:8px">เปิดหน้าจัดการ</button>
+        </div>
+      </details>
     </div>
 
     <p class="note">
-      ◉ หลักการ: ดิสก์เครื่องนี้คือที่เก็บหลัก — hub เป็นแค่ทางผ่านของข้อมูล
-      ไม่มีไฟล์ภาพถูกบันทึกบนเซิร์ฟเวอร์ภายนอกแม้แต่ไฟล์เดียว
-      ปิดหน้าต่างนี้เมื่อเชื่อมต่อแล้วก็ได้ ระบบทำงานต่อเบื้องหลัง
+      หลักการของ CameraSync: ดิสก์เครื่องนี้คือที่เก็บรูปทั้งหมด —
+      ระบบกลางเป็นแค่ทางผ่าน ไม่มีไฟล์ภาพถูกบันทึกบนเซิร์ฟเวอร์ภายนอกแม้แต่ไฟล์เดียว
     </p>
+
+    <div class="toast" id="toast"></div>
 
     <script>
       const { invoke } = window.__TAURI__.core;
       const $ = (id) => document.getElementById(id);
-      let started = false;
+      let connected = false;
 
-      const setState = (dot, text, mode) => {
-        $(dot).className = "dot" + (mode ? " " + mode : "");
-        $(text).textContent =
-          typeof arguments[3] === "string" ? arguments[3] : $(text).textContent;
+      const toast = (msg) => {
+        const t = $("toast");
+        t.textContent = msg;
+        t.classList.add("show");
+        setTimeout(() => t.classList.remove("show"), 2200);
       };
 
-      $("pickBtn").onclick = async () => {
-        const dir = await invoke("pick_import_folder");
-        if (dir) $("importDir").value = dir;
+      const setSrv = (text, mode) => {
+        $("srvDot").className = "dot" + (mode ? " " + mode : "");
+        $("srvText").textContent = text;
+      };
+      const setHub = (text, mode) => {
+        $("hubDot").className = "dot" + (mode ? " " + mode : "");
+        $("hubText").textContent = text;
       };
 
-      $("startBtn").onclick = async () => {
-        if (started) return;
-        $("startBtn").disabled = true;
-        $("srvDot").className = "dot warn";
-        $("srvText").textContent = "กำลังเริ่ม…";
+      const renderStatus = (s) => {
+        if (s.server_running) {
+          setSrv("ทำงานอยู่ (พอร์ต " + s.port + ")", "on");
+          $("srvSub").textContent = "รูปทั้งหมดอยู่บนดิสก์เครื่องนี้ — ไม่มีการอัปโหลดไปเก็บที่อื่น";
+        }
+        if (s.line_user || s.tunnel_status.includes("เชื่อมต่อแล้ว")) {
+          connected = true;
+          setHub(s.line_user ? "เชื่อมต่อแล้ว — LINE: " + s.line_user : s.tunnel_status, "on");
+          $("loginCard").style.display = "none";
+        }
+        if (s.events.length) {
+          $("linksCard").style.display = "";
+          const box = $("links");
+          box.innerHTML = "";
+          for (const ev of s.events) {
+            const url = s.guest_base + "/e/" + ev.slug;
+            const row = document.createElement("div");
+            row.className = "link-row";
+            row.innerHTML =
+              '<div class="t"><b></b><span></span></div>' +
+              '<button class="secondary" data-a="copy">คัดลอก</button>' +
+              '<button class="secondary" data-a="open">เปิด</button>';
+            row.querySelector("b").textContent = ev.title || ev.slug;
+            row.querySelector("span").textContent = url;
+            row.querySelector('[data-a="copy"]').onclick = async () => {
+              await navigator.clipboard.writeText(url);
+              toast("คัดลอกลิงก์แล้ว ✓");
+            };
+            row.querySelector('[data-a="open"]').onclick = () =>
+              invoke("open_in_browser", { url });
+            box.appendChild(row);
+          }
+        }
+        $("adminUrl").textContent = "http://localhost:" + s.port + "/admin";
+        $("adminCred").textContent = s.local_admin
+          ? s.local_admin[0] + " / " + s.local_admin[1]
+          : "—";
+        $("importDir").textContent = s.import_dir;
+        $("hubUrl").textContent = s.hub_url;
+      };
+
+      // initial + periodic refresh (cheap local DB query)
+      const refresh = async () => {
+        try { renderStatus(await invoke("get_status")); } catch {}
+      };
+      refresh();
+      setInterval(refresh, 2000);
+
+      // live tunnel status events
+      if (window.__TAURI__.event) {
+        window.__TAURI__.event.listen("tunnel-status", (ev) => {
+          setHub(ev.payload, ev.payload.includes("เชื่อมต่อแล้ว") ? "on" : "warn");
+        });
+      }
+
+      $("lineBtn").onclick = async () => {
+        const btn = $("lineBtn");
+        btn.disabled = true;
+        $("lineErr").style.display = "none";
+        setHub("เปิดหน้า LINE ให้แล้ว — ยืนยันในเบราว์เซอร์…", "warn");
         try {
-          const port = await invoke("start_server", {
-            importDir: $("importDir").value || null,
-          });
-          started = true;
-          $("srvDot").className = "dot on";
-          $("srvText").textContent = "กำลังทำงาน (พอร์ต " + port + ")";
-          $("srvUrl").style.display = "inline-flex";
-          $("srvUrl").innerHTML =
-            '<span class="url">http://localhost:' + port + "</span>";
-          $("adminBtn").disabled = false;
+          const stateKey = await invoke("line_login");
+          setHub("รอยืนยันตัวตนใน LINE…", "warn");
+          const tid = await invoke("line_connect", { stateKey });
+          connected = true;
+          setHub("เชื่อมต่อแล้ว ✓", "on");
+          $("loginCard").style.display = "none";
+          toast("เชื่อมต่อสำเร็จ — ลิงก์แขกพร้อมใช้แล้ว");
+          refresh();
         } catch (e) {
-          $("srvDot").className = "dot";
-          $("srvText").textContent = "เริ่มไม่สำเร็จ";
-          $("hubErr").style.display = "block";
-          $("hubErr").textContent = String(e);
-          $("startBtn").disabled = false;
+          setHub("ยังไม่เชื่อมต่อ hub");
+          $("lineErr").style.display = "block";
+          $("lineErr").textContent = String(e);
+          btn.disabled = false;
+        }
+      };
+
+      $("addBtn").onclick = async () => {
+        const btn = $("addBtn");
+        btn.disabled = true;
+        try {
+          const dir = await invoke("add_photo_folder");
+          if (dir) {
+            $("importSub").textContent = "กำลังอ่านรูปจาก " + dir + " — รูปใหม่จะขึ้นให้แขกเห็นเองอัตโนมัติ";
+            toast("เพิ่มโฟลเดอร์เรียบร้อย ✓");
+          }
+        } catch (e) {
+          $("lineErr").style.display = "block";
+          $("lineErr").textContent = String(e);
+        } finally {
+          btn.disabled = false;
         }
       };
 
       $("adminBtn").onclick = async () => {
         const s = await invoke("get_status");
-        if (s.local_url) await invoke("open_in_browser", { url: s.local_url + "/admin" });
-      };
-
-      const setHubStatus = (text, mode) => {
-        $("hubDot").className = "dot" + (mode ? " " + mode : "");
-        $("hubText").textContent = text;
-      };
-
-      // live status events from the tunnel task
-      if (window.__TAURI__.event) {
-        window.__TAURI__.event.listen("tunnel-status", (ev) => {
-          setHubStatus(ev.payload, ev.payload.includes("เชื่อมต่อแล้ว") ? "on" : "warn");
-        });
-      }
-
-      $("lineBtn").onclick = async () => {
-        const url = $("hubUrl").value.trim();
-        $("hubErr").style.display = "none";
-        $("hubOk").style.display = "none";
-        if (!url) {
-          $("hubErr").style.display = "block";
-          $("hubErr").textContent = "กรอก hub URL ก่อน";
-          return;
-        }
-        if (!started) {
-          $("hubErr").style.display = "block";
-          $("hubErr").textContent = "เริ่มเซิร์ฟเวอร์ (ข้อ 1) ก่อนนะ";
-          return;
-        }
-        setHubStatus("เปิด LINE ให้แล้ว — ยืนยันในเบราว์เซอร์…", "warn");
-        try {
-          const stateKey = await invoke("line_login", { hubUrl: url });
-          setHubStatus("รอยืนยันใน LINE…", "warn");
-          const tid = await invoke("line_connect", { stateKey });
-          $("hubOk").style.display = "block";
-          $("hubOk").textContent = "เชื่อมต่อสำเร็จ (LINE) — tunnel: " + tid;
-          setHubStatus("เชื่อมต่อแล้ว (" + tid + ")", "on");
-        } catch (e) {
-          setHubStatus("เชื่อมต่อไม่สำเร็จ");
-          $("hubErr").style.display = "block";
-          $("hubErr").textContent = String(e);
-        }
-      };
-
-      $("hubBtn").onclick = async () => {
-        const url = $("hubUrl").value.trim();
-        const user = $("hubUser").value.trim();
-        const pass = $("hubPass").value;
-        $("hubErr").style.display = "none";
-        $("hubOk").style.display = "none";
-        if (!url || !user || !pass) {
-          $("hubErr").style.display = "block";
-          $("hubErr").textContent = "กรอก hub URL, username และ password ให้ครบ";
-          return;
-        }
-        if (!started) {
-          $("hubErr").style.display = "block";
-          $("hubErr").textContent = "เริ่มเซิร์ฟเวอร์ (ข้อ 1) ก่อนนะ";
-          return;
-        }
-        setHubStatus("กำลังตรวจสอบ…", "warn");
-        try {
-          if ($("regChk").checked) {
-            await invoke("register_hub", { params: { url, user, pass } });
-          }
-          const tid = await invoke("connect_hub", { params: { url, user, pass } });
-          $("hubOk").style.display = "block";
-          $("hubOk").textContent = "เชื่อมต่อสำเร็จ — tunnel: " + tid + " (แขกเข้าผ่าน hub/e/ชื่องาน)";
-          setHubStatus("เชื่อมต่อแล้ว (" + tid + ")", "on");
-        } catch (e) {
-          setHubStatus("เชื่อมต่อไม่สำเร็จ");
-          $("hubErr").style.display = "block";
-          $("hubErr").textContent = String(e);
-        }
+        if (s.port) await invoke("open_in_browser", { url: "http://localhost:" + s.port + "/admin" });
       };
     </script>
   </body>

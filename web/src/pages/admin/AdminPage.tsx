@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
 import { AnimatePresence, motion } from "motion/react"
 import {
-  Aperture,
   CalendarDays,
   Images,
   Loader2,
@@ -13,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react"
 import { toast } from "sonner"
+import { LogoMark } from "@/components/Logo"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -146,9 +146,7 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle: str
       <Card className="w-full max-w-sm">
         <CardContent className="pt-8">
           <Link to="/" className="mb-6 flex items-center justify-center gap-2">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <Aperture className="size-5" />
-            </span>
+            <LogoMark size={34} />
             <span className="font-display text-xl font-semibold">CameraSync</span>
           </Link>
           <h1 className="text-center font-display text-xl font-semibold">{title}</h1>
@@ -179,9 +177,7 @@ function EventsView({ username }: { username: string }) {
       <header className="border-b border-border/60 bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
           <Link to="/admin" className="flex items-center gap-2.5">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <Aperture className="size-5" />
-            </span>
+            <LogoMark size={34} />
             <div className="leading-tight">
               <div className="font-display text-lg font-semibold">CameraSync</div>
               <div className="-mt-0.5 text-[11px] text-muted-foreground">สวัสดี {username}</div>
