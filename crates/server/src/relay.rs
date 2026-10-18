@@ -63,13 +63,54 @@ pub struct HubState {
     slug_map: Mutex<HashMap<String, String>>,
     /// LINE Login pending handshakes: state → result
     line_pending: Mutex<HashMap<String, LinePending>>,
+    /// event slug → (fetched_at_ms, /api/g/{slug}/info JSON) — used to build
+    /// share-link previews (album title + cover) without hitting the tunnel
+    /// for every page view
+    event_info: Mutex<HashMap<String, (i64, serde_json::Value)>>,
     counter: AtomicU64,
 }
 
 #[derive(Clone)]
 struct LinePending {
     created: i64,
-    done: Option<(String, String)>, // (machine token, tunnel_id)
+    done: Option<(String, String, String)>, // (machine token, tunnel_id, short_id)
+}
+
+/// Every account gets a short unique id (4 chars) used to prefix its event
+/// slugs — allocated lazily so existing users get one on their next login.
+async fn ensure_short_id(st: &SharedHub, user_id: &str) -> Result<String, crate::error::AppError> {
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT short_id FROM users WHERE id = ?1")
+            .bind(user_id)
+            .fetch_optional(&st.db)
+            .await
+            .map_err(crate::error::AppError::from)?;
+    let Some((existing,)) = row else {
+        return Ok(String::new());
+    };
+    if let Some(id) = existing.filter(|s| !s.is_empty()) {
+        return Ok(id);
+    }
+    for _ in 0..10 {
+        let candidate = crate::util::random_suffix(4);
+        let taken: Option<(String,)> =
+            sqlx::query_as("SELECT id FROM users WHERE short_id = ?1")
+                .bind(&candidate)
+                .fetch_optional(&st.db)
+                .await
+                .map_err(crate::error::AppError::from)?;
+        if taken.is_some() {
+            continue;
+        }
+        sqlx::query("UPDATE users SET short_id = ?1 WHERE id = ?2")
+            .bind(&candidate)
+            .bind(user_id)
+            .execute(&st.db)
+            .await
+            .map_err(crate::error::AppError::from)?;
+        return Ok(candidate);
+    }
+    Ok(String::new())
 }
 
 pub type SharedHub = Arc<HubState>;
@@ -145,6 +186,7 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
         tunnels: Mutex::new(HashMap::new()),
         slug_map: Mutex::new(HashMap::new()),
         line_pending: Mutex::new(HashMap::new()),
+        event_info: Mutex::new(HashMap::new()),
         counter: AtomicU64::new(1),
     });
 
@@ -159,6 +201,7 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
         .route("/r/line/login", get(line_login_redirect))
         .route("/r/line/callback", get(line_callback))
         .route("/r/line/poll", get(line_poll))
+        .route("/r/machine/info", get(machine_info))
         .route("/r/line/start", get(line_web_start))
         .route("/r/line/me", get(line_me_page))
         .route("/r/admin", get(admin_page))
@@ -170,6 +213,7 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
         .route("/t/{id}/{*rest}", any(tunnel_entry))
         .route("/e/{slug}", any(guest_entry))
         .route("/e/{slug}/", any(guest_entry))
+        .route("/e/{slug}/cover.jpg", get(cover_jpg))
         .route("/e/{slug}/{*rest}", any(guest_entry))
         .route("/perf", any(perf_entry))
         .route("/assets/{*path}", any(assets_entry))
@@ -318,17 +362,20 @@ async fn register_inner(
         return Err(crate::error::AppError::Conflict("username นี้ถูกใช้แล้ว".into()));
     }
     let hash = crate::auth::hash_password(&req.password).map_err(crate::error::AppError::from)?;
+    let new_id = crate::util::new_id();
     sqlx::query("INSERT INTO users(id, username, password_hash, created_at) VALUES (?1,?2,?3,?4)")
-        .bind(crate::util::new_id())
+        .bind(&new_id)
         .bind(req.username.trim())
         .bind(&hash)
         .bind(crate::util::now_ms())
         .execute(&st.db)
         .await
         .map_err(crate::error::AppError::from)?;
+    let short_id = ensure_short_id(&st, &new_id).await.unwrap_or_default();
     Ok(serde_json::json!({
         "ok": true,
         "tunnel_id": tunnel_id_for(&req.username),
+        "short_id": short_id,
         "message": "ลงทะเบียนสำเร็จ — ใช้ username/password นี้ล็อกอินจาก desktop app",
     }))
 }
@@ -365,9 +412,11 @@ async fn login_inner(
         .execute(&st.db)
         .await
         .map_err(crate::error::AppError::from)?;
+    let short_id = ensure_short_id(&st, &user_id).await.unwrap_or_default();
     Ok(serde_json::json!({
         "token": token,
         "tunnel_id": tunnel_id_for(&req.username),
+        "short_id": short_id,
         "expires_in_ms": ttl,
     }))
 }
@@ -1001,10 +1050,11 @@ async fn line_callback(
         .execute(&st.db)
         .await;
     let tunnel_id = tunnel_id_for(&username);
+    let short_id = ensure_short_id(&st, &user_id).await.unwrap_or_default();
 
     let mut map = st.line_pending.lock().await;
     if let Some(p) = map.get_mut(state) {
-        p.done = Some((token, tunnel_id.clone()));
+        p.done = Some((token, tunnel_id.clone(), short_id));
     }
     drop(map);
 
@@ -1032,6 +1082,49 @@ struct LinePollQuery {
     state: String,
 }
 
+/// Machine self-info: lets a desktop app that reconnected with a saved token
+/// (issued before short_id existed) pick up its short id without logging in
+/// again — new event slugs are prefixed with it.
+async fn machine_info(
+    State(st): State<SharedHub>,
+    headers: HeaderMap,
+) -> Response {
+    let Some(token) = crate::util::bearer_token(&headers) else {
+        return crate::error::AppError::Unauthorized("missing bearer token".into()).into_response();
+    };
+    let Some(username) = session_user(&st, &token).await else {
+        return crate::error::AppError::Unauthorized("invalid token".into()).into_response();
+    };
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT u.short_id FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?1")
+            .bind(&token)
+            .fetch_optional(&st.db)
+            .await
+            .ok()
+            .flatten();
+    let short_id = match row {
+        Some((id,)) if id.as_deref().map_or(false, |s| !s.is_empty()) => id.unwrap(),
+        _ => {
+            // allocate lazily via the session's user
+            let uid: Option<(String,)> = sqlx::query_as("SELECT user_id FROM sessions WHERE token = ?1")
+                .bind(&token)
+                .fetch_optional(&st.db)
+                .await
+                .ok()
+                .flatten();
+            match uid {
+                Some((uid,)) => ensure_short_id(&st, &uid).await.unwrap_or_default(),
+                None => String::new(),
+            }
+        }
+    };
+    Json(serde_json::json!({
+        "tunnel_id": tunnel_id_for(&username),
+        "short_id": short_id,
+    }))
+    .into_response()
+}
+
 async fn line_poll(State(st): State<SharedHub>, Query(q): Query<LinePollQuery>) -> Response {
     let mut map = st.line_pending.lock().await;
     let Some(p) = map.get(&q.state) else {
@@ -1042,11 +1135,12 @@ async fn line_poll(State(st): State<SharedHub>, Query(q): Query<LinePollQuery>) 
         return crate::error::AppError::bad("หมดเวลาล็อกอิน — เริ่มใหม่อีกครั้ง").into_response();
     }
     match &p.done {
-        Some((token, tunnel_id)) => {
+        Some((token, tunnel_id, short_id)) => {
             let token = token.clone();
             let tunnel_id = tunnel_id.clone();
+            let short_id = short_id.clone();
             map.remove(&q.state);
-            Json(serde_json::json!({ "token": token, "tunnel_id": tunnel_id })).into_response()
+            Json(serde_json::json!({ "token": token, "tunnel_id": tunnel_id, "short_id": short_id })).into_response()
         }
         None => Json(serde_json::json!({ "pending": true })).into_response(),
     }
@@ -1301,8 +1395,111 @@ struct GuestPath {
     rest: Option<String>,
 }
 
+/// Cached `/api/g/{slug}/info` fetched through the owning tunnel — powers
+/// share-link previews (title + cover) without a round trip per page view.
+async fn tunnel_event_info(state: &SharedHub, slug: &str, tunnel_id: &str) -> Option<serde_json::Value> {
+    const TTL_MS: i64 = 60_000;
+    if let Some((at, v)) = state.event_info.lock().await.get(slug) {
+        if crate::util::now_ms() - at < TTL_MS {
+            return Some(v.clone());
+        }
+    }
+    let resp = proxy(
+        state,
+        tunnel_id,
+        Method::GET,
+        format!("/api/g/{slug}/info"),
+        HeaderMap::new(),
+        axum::body::Bytes::new(),
+    )
+    .await;
+    let (status, headers, body) = split_response(resp).await;
+    if !status.is_success() {
+        return None;
+    }
+    let _ = headers;
+    let v: serde_json::Value = serde_json::from_slice(&body).ok()?;
+    state
+        .event_info
+        .lock()
+        .await
+        .insert(slug.to_string(), (crate::util::now_ms(), v.clone()));
+    Some(v)
+}
+
+fn split_response(resp: Response) -> impl std::future::Future<Output = (StatusCode, HeaderMap, axum::body::Bytes)> {
+    async move {
+        let (parts, body) = resp.into_parts();
+        let bytes = axum::body::to_bytes(body, 8 * 1024 * 1024)
+            .await
+            .unwrap_or_default();
+        (parts.status, parts.headers, bytes)
+    }
+}
+
+/// Absolute origin as the outside world sees it (NPM terminates TLS in front
+/// of the hub and forwards proto/host).
+fn public_origin(headers: &HeaderMap) -> String {
+    let proto = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("https")
+        .to_string();
+    let host = headers
+        .get(axum::http::header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("sync.khunaistory.com");
+    format!("{proto}://{host}")
+}
+
+/// Embed the album name + cover into the SPA shell so link previews (LINE,
+/// Facebook, iMessage …) show what the photographer named and chose, not a
+/// generic site card. Bots don't run JavaScript, so this must be server-side.
+fn inject_share_meta(html: String, title: &str, image_url: &str) -> String {
+    let esc = |s: &str| {
+        s.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+    };
+    let title_esc = esc(title);
+    let metas = format!(
+        "<meta property=\"og:title\" content=\"{title_esc} — CameraSync\" />\
+         <meta property=\"og:site_name\" content=\"CameraSync\" />\
+         <meta property=\"og:type\" content=\"website\" />\
+         <meta property=\"og:image\" content=\"{image_url}\" />\
+         <meta name=\"twitter:card\" content=\"summary_large_image\" />\
+         <meta name=\"twitter:title\" content=\"{title_esc} — CameraSync\" />\
+         <meta name=\"twitter:image\" content=\"{image_url}\" />"
+    );
+    let mut out = html;
+    if let Some(pos) = out.find("</title>") {
+        let cut = pos + "</title>".len();
+        let (head, tail) = out.split_at(cut);
+        out = format!("{head}{metas}{tail}");
+    } else if let Some(pos) = out.find("</head>") {
+        let (head, tail) = out.split_at(pos);
+        out = format!("{head}{metas}{tail}");
+    }
+    // the SPA re-sets document.title on mount; this one is for the preview
+    if let Some(start) = out.find("<title>") {
+        if let Some(end) = out.find("</title>") {
+            if end > start {
+                out = format!(
+                    "{}<title>{} — CameraSync</title>{}",
+                    &out[..start],
+                    title_esc,
+                    &out[end + "</title>".len()..]
+                );
+            }
+        }
+    }
+    out
+}
+
 /// Guest entry: pretty `/e/{slug}/…` — look up which machine owns the event,
 /// forward, and set the tunnel cookie. Guests never see a tunnel prefix.
+/// First page view (no cookie yet) gets the share-preview meta injected.
 async fn guest_entry(
     State(state): State<SharedHub>,
     Path(p): Path<GuestPath>,
@@ -1317,12 +1514,105 @@ async fn guest_entry(
     let Some(tunnel_id) = owner else {
         return error_page(
             StatusCode::NOT_FOUND,
-            "ไม่พบงานนี้บน hub — เครื่องช่างภาพอาจยังไม่ได้เชื่อมต่อ หรือ slug ไม่ถูกต้อง",
+            "ไม่พบงานนี้บน hub — เครื่องช่างภาพอาจยังไม่เชื่อมต่อ หรือ slug ไม่ถูกต้อง",
         );
     };
+    let is_page = p.rest.as_deref().map_or(true, |r| r.is_empty());
+    let wants_html = headers
+        .get(axum::http::header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .map_or(false, |a| a.contains("text/html"));
+    let has_cookie = crate::util::parse_cookies(&headers)
+        .get(TUNNEL_COOKIE)
+        .is_some();
+    if method == Method::GET && is_page && wants_html && !has_cookie {
+        if let (Some(info), Some(html)) = (
+            tunnel_event_info(&state, &p.slug, &tunnel_id).await,
+            crate::embedded_web_asset("index.html"),
+        ) {
+            let title = info["title"].as_str().unwrap_or("แกลเลอรีงานแต่ง");
+            let origin = public_origin(&headers);
+            let page = inject_share_meta(
+                String::from_utf8(html.into_owned()).unwrap_or_default(),
+                title,
+                &format!("{origin}/e/{}/cover.jpg", p.slug),
+            );
+            let mut resp = axum::response::Response::builder()
+                .status(StatusCode::OK)
+                .header("content-type", "text/html; charset=utf-8")
+                .header("cache-control", "no-store")
+                .body(axum::body::Body::from(page))
+                .expect("static response");
+            set_tunnel_cookie(&mut resp, &tunnel_id);
+            return resp;
+        }
+    }
     let mut resp = proxy(&state, &tunnel_id, method, path, headers, bytes).await;
     set_tunnel_cookie(&mut resp, &tunnel_id);
     resp
+}
+
+/// Share-preview cover image: the photographer's chosen photo, falling back
+/// to the newest ready photo. Pulled through the tunnel, cached briefly.
+async fn cover_jpg(
+    State(state): State<SharedHub>,
+    Path(p): Path<GuestPath>,
+    req: axum::extract::Request,
+) -> Response {
+    let (method, _, headers, bytes) = read_request_parts(req).await;
+    let _ = (method, bytes);
+    let owner = state.slug_map.lock().await.get(&p.slug).cloned();
+    let Some(tunnel_id) = owner else {
+        return error_page(StatusCode::NOT_FOUND, "ไม่พบงานนี้บน hub");
+    };
+    let Some(info) = tunnel_event_info(&state, &p.slug, &tunnel_id).await else {
+        return error_page(StatusCode::NOT_FOUND, "ไม่พบข้อมูลงาน");
+    };
+    let photo_id = info["cover_photo_id"].as_str().map(|s| s.to_string());
+    let photo_id = match photo_id {
+        Some(id) => Some(id),
+        None => {
+            // no explicit cover yet — newest ready photo
+            let resp = proxy(
+                &state,
+                &tunnel_id,
+                Method::GET,
+                format!("/api/g/{}/photos?limit=1", p.slug),
+                HeaderMap::new(),
+                axum::body::Bytes::new(),
+            )
+            .await;
+            let (status, _, body) = split_response(resp).await;
+            if !status.is_success() {
+                return error_page(StatusCode::NOT_FOUND, "ยังไม่มีรูปในงาน");
+            }
+            serde_json::from_slice::<serde_json::Value>(&body)
+                .ok()
+                .and_then(|v| v["items"][0]["id"].as_str().map(|s| s.to_string()))
+        }
+    };
+    let Some(photo_id) = photo_id else {
+        return error_page(StatusCode::NOT_FOUND, "ยังไม่มีรูปในงาน");
+    };
+    let resp = proxy(
+        &state,
+        &tunnel_id,
+        Method::GET,
+        format!("/api/photos/{photo_id}/file?variant=web"),
+        HeaderMap::new(),
+        axum::body::Bytes::new(),
+    )
+    .await;
+    let (status, _, body) = split_response(resp).await;
+    if !status.is_success() {
+        return error_page(StatusCode::NOT_FOUND, "ไม่พบรูปปก");
+    }
+    axum::response::Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", "image/jpeg")
+        .header("cache-control", "public, max-age=300")
+        .body(axum::body::Body::from(body))
+        .expect("static response")
 }
 
 /// Fallback: cookie-bound traffic (/api/…, /assets/…, SPA routes) goes back

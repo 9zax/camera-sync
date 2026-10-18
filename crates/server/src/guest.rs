@@ -67,6 +67,7 @@ pub async fn info(
         "photo_count": ready,
         "face_enabled": ev.face_enabled != 0 && face_ready(&st),
         "pin_required": !ev.pin.is_empty(),
+        "cover_photo_id": ev.cover_photo_id,
     })))
 }
 

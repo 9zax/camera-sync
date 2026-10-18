@@ -15,6 +15,7 @@ import {
   QrCode,
   ScanFace,
   Settings2,
+  Star,
   Terminal,
   Trash2,
   UploadCloud,
@@ -254,6 +255,11 @@ function AdminGallery({ eventId }: { eventId: string }) {
     queryFn: () => api.get<PhotoList>(`/api/events/${eventId}/photos?limit=500`),
     refetchInterval: 5_000,
   })
+  const eventQuery = useQuery({
+    queryKey: ["event", eventId],
+    queryFn: () => api.get<AdminEvent>(`/api/events/${eventId}`),
+  })
+  const coverPhotoId = eventQuery.data?.cover_photo_id ?? null
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const del = useMutation({
     mutationFn: (pid: string) => api.del(`/api/photos/${pid}`),
@@ -264,6 +270,15 @@ function AdminGallery({ eventId }: { eventId: string }) {
       void qc.invalidateQueries({ queryKey: ["event", eventId] })
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ"),
+  })
+  const setCover = useMutation({
+    mutationFn: (photoId: string | null) =>
+      api.post<AdminEvent>(`/api/events/${eventId}/cover`, { photo_id: photoId }),
+    onSuccess: (_e, photoId) => {
+      toast.success(photoId ? "ตั้งเป็นภาพปกอัลบั้มแล้ว — การ์ดแชร์ลิงก์จะใช้รูปนี้" : "เอาภาพปกออกแล้ว (ใช้รูปใหม่สุดแทน)")
+      void qc.invalidateQueries({ queryKey: ["event", eventId] })
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "ตั้งภาพปกไม่สำเร็จ"),
   })
 
   const photos = photosQuery.data?.items ?? []
@@ -308,6 +323,22 @@ function AdminGallery({ eventId }: { eventId: string }) {
               >
                 <Trash2 className="size-4" />
               </motion.button>
+              {p.status === "ready" && (
+                <motion.button
+                  onClick={() => setCover.mutate(coverPhotoId === p.id ? null : p.id)}
+                  disabled={setCover.isPending}
+                  className={`absolute left-2 top-2 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium backdrop-blur transition-colors ${
+                    coverPhotoId === p.id
+                      ? "bg-[oklch(84%_0.19_80.46)] text-[oklch(7%_0.006_95)]"
+                      : "hidden bg-black/60 text-white group-hover:flex"
+                  }`}
+                  title={coverPhotoId === p.id ? "เอารูปนี้ออกจากปกอัลบั้ม" : "ตั้งเป็นภาพปกอัลบั้ม (ใช้ในการ์ดแชร์ลิงก์)"}
+                  whileTap={{ scale: 0.92 }}
+                >
+                  <Star className={`size-3.5 ${coverPhotoId === p.id ? "fill-current" : ""}`} />
+                  {coverPhotoId === p.id ? "ภาพปกอัลบั้ม" : "ตั้งเป็นปก"}
+                </motion.button>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>

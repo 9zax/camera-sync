@@ -28,11 +28,21 @@ pub async fn init_pool(cfg: &Config) -> anyhow::Result<SqlitePool> {
             .execute(&pool)
             .await?;
     }
+    if !cols.iter().any(|(name,)| name == "cover_photo_id") {
+        sqlx::raw_sql("ALTER TABLE events ADD COLUMN cover_photo_id TEXT")
+            .execute(&pool)
+            .await?;
+    }
     let user_cols: Vec<(String,)> = sqlx::query_as("SELECT name FROM pragma_table_info('users')")
         .fetch_all(&pool)
         .await?;
     if !user_cols.iter().any(|(name,)| name == "is_admin") {
         sqlx::raw_sql("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+            .execute(&pool)
+            .await?;
+    }
+    if !user_cols.iter().any(|(name,)| name == "short_id") {
+        sqlx::raw_sql("ALTER TABLE users ADD COLUMN short_id TEXT")
             .execute(&pool)
             .await?;
     }

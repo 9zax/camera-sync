@@ -346,6 +346,7 @@ async fn serve_http(state: SharedState, port: u16) -> anyhow::Result<()> {
         )
         .route("/api/events/{id}/token", post(events::regen_token))
         .route("/api/events/{id}/enabled", post(events::set_enabled_route))
+        .route("/api/events/{id}/cover", post(events::set_cover_route))
         .route("/api/events/{id}/qr.png", get(events::qr_png))
         .route("/api/events/{id}/photos", get(photos::list_admin).post(photos::upload))
         .route("/api/events/{id}/download.zip", get(photos::download_zip))

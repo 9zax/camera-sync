@@ -123,6 +123,19 @@ fn start_tunnel_task(app: &tauri::AppHandle, hub: String, port: u16, creds: weds
     *state.hub_url.write().unwrap() = hub.clone();
     *state.line_user.write().unwrap() = creds.tunnel_id.clone();
     *state.tunnel_status.write().unwrap() = "กำลังเชื่อมต่อ hub…".into();
+    // backfill the account short id (new event slugs are prefixed with it)
+    // without forcing a re-login on machines with an older saved session
+    {
+        let info_hub = hub.clone();
+        let mut info_creds = creds.clone();
+        rt().spawn(async move {
+            match wedsync_agent::refresh_machine_info(&info_hub, &mut info_creds).await {
+                Ok(true) => save_machine_session(&info_creds),
+                Ok(false) => {}
+                Err(e) => eprintln!("machine info refresh failed: {e}"),
+            }
+        });
+    }
     let cfg = wedsync_agent::TunnelConfig {
         server: format!("http://localhost:{port}"),
         relay: hub,

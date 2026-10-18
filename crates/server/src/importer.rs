@@ -75,7 +75,14 @@ pub async fn resolve_or_create_event(st: &SharedState, event: &Option<String>, d
     let _ = created; // always create a fresh event for an explicit import dir
     let id = crate::util::new_id();
     let base = crate::util::slugify(&title);
-    let mut slug = format!("{base}-{}", crate::util::random_suffix(4));
+    // prefix with the photographer's short id so links carry their identity
+    let short = crate::util::machine_short_id(&st.cfg.data_dir);
+    let qualified = if short.is_empty() {
+        base.clone()
+    } else {
+        format!("{short}-{base}")
+    };
+    let mut slug = format!("{qualified}-{}", crate::util::random_suffix(4));
     for _ in 0..5 {
         let taken: Option<(String,)> =
             sqlx::query_as("SELECT slug FROM events WHERE slug = ?1")
@@ -85,7 +92,7 @@ pub async fn resolve_or_create_event(st: &SharedState, event: &Option<String>, d
         if taken.is_none() {
             break;
         }
-        slug = format!("{base}-{}", crate::util::random_suffix(5));
+        slug = format!("{qualified}-{}", crate::util::random_suffix(5));
     }
     sqlx::query(
         "INSERT INTO events(id, slug, title, partner_a, partner_b, event_date, pin, face_enabled, upload_token, created_at) \

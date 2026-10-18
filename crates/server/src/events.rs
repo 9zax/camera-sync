@@ -23,6 +23,9 @@ pub struct Event {
     pub upload_token: String,
     pub created_at: i64,
     pub enabled: i64,
+    /// photo chosen by the photographer as the share-link cover (OG image)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_photo_id: Option<String>,
 }
 
 #[derive(sqlx::FromRow, serde::Serialize)]
@@ -37,7 +40,7 @@ pub struct EventWithCounts {
 }
 
 const EVENT_COLUMNS: &str =
-    "e.id, e.slug, e.title, e.partner_a, e.partner_b, e.event_date, e.pin, e.face_enabled, e.upload_token, e.created_at, e.enabled";
+    "e.id, e.slug, e.title, e.partner_a, e.partner_b, e.event_date, e.pin, e.face_enabled, e.upload_token, e.created_at, e.enabled, e.cover_photo_id";
 const EVENT_COUNTS: &str = "\
  (SELECT COUNT(*) FROM photos p WHERE p.event_id = e.id) AS total, \
  (SELECT COUNT(*) FROM photos p WHERE p.event_id = e.id AND p.status = 'ready') AS ready, \
@@ -152,7 +155,14 @@ pub async fn create(
         return Err(AppError::bad("PIN ต้องไม่เกิน 12 ตัวอักษร"));
     }
     let base = slugify(&title);
-    let mut slug = format!("{base}-{}", random_suffix(4));
+    // prefix with the photographer's short id so links carry their identity
+    let short = crate::util::machine_short_id(&st.cfg.data_dir);
+    let qualified = if short.is_empty() {
+        base.clone()
+    } else {
+        format!("{short}-{base}")
+    };
+    let mut slug = format!("{qualified}-{}", random_suffix(4));
     for _ in 0..5 {
         let taken: Option<(String,)> =
             sqlx::query_as("SELECT slug FROM events WHERE slug = ?1")
@@ -163,7 +173,7 @@ pub async fn create(
         if taken.is_none() {
             break;
         }
-        slug = format!("{base}-{}", random_suffix(5));
+        slug = format!("{qualified}-{}", random_suffix(5));
     }
     let id = new_id();
     sqlx::query(
@@ -400,6 +410,52 @@ pub async fn set_event_enabled(
         return Err(AppError::not_found("event not found"));
     }
     Ok(fetch_with_counts(st, id).await?)
+}
+
+/// Choose (or clear) the album cover photo used by the share-link preview.
+/// `photo_id = None` clears it — the newest ready photo becomes the default.
+pub async fn set_cover(
+    st: &SharedState,
+    id: &str,
+    photo_id: Option<&str>,
+) -> Result<EventWithCounts, AppError> {
+    if let Some(pid) = photo_id {
+        let owner: Option<(String,)> =
+            sqlx::query_as("SELECT id FROM photos WHERE id = ?1 AND event_id = ?2 AND status = 'ready'")
+                .bind(pid)
+                .bind(id)
+                .fetch_optional(&st.pool)
+                .await
+                .map_err(AppError::from)?;
+        if owner.is_none() {
+            return Err(AppError::bad("ไม่พบรูปนี้ในงาน"));
+        }
+    }
+    let res = sqlx::query("UPDATE events SET cover_photo_id = ?1 WHERE id = ?2")
+        .bind(photo_id)
+        .bind(id)
+        .execute(&st.pool)
+        .await
+        .map_err(AppError::from)?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::not_found("event not found"));
+    }
+    Ok(fetch_with_counts(st, id).await?)
+}
+
+#[derive(Deserialize)]
+pub struct SetCoverReq {
+    pub photo_id: Option<String>,
+}
+
+pub async fn set_cover_route(
+    State(st): State<SharedState>,
+    _user: AuthUser,
+    Path(id): Path<String>,
+    Json(req): Json<SetCoverReq>,
+) -> ApiResult<Json<EventWithCounts>> {
+    let pid = req.photo_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    Ok(Json(set_cover(&st, &id, pid).await?))
 }
 
 pub async fn regen_token(

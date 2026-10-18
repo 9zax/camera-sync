@@ -45,6 +45,42 @@ pub struct TunnelConfig {
 pub struct MachineCreds {
     pub tunnel_id: String,
     pub token: String,
+    /// Short account id used to prefix new event slugs (`{short}-{folder}-{rand}`).
+    /// Empty for sessions saved before this field existed — refresh_machine_info
+    /// backfills it without a fresh login.
+    #[serde(default)]
+    pub short_id: String,
+}
+
+/// Pull the account's tunnel/short id with a saved machine token, so a
+/// desktop app that reconnected silently can learn its short id. Returns
+/// true when creds changed.
+pub async fn refresh_machine_info(relay: &str, creds: &mut MachineCreds) -> Result<bool> {
+    let http = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .build()?;
+    let resp: serde_json::Value = http
+        .get(format!("{}/r/machine/info", ws_to_http(relay)))
+        .bearer_auth(&creds.token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let mut changed = false;
+    if let Some(t) = resp["tunnel_id"].as_str() {
+        if t != creds.tunnel_id {
+            creds.tunnel_id = t.to_string();
+            changed = true;
+        }
+    }
+    if let Some(s) = resp["short_id"].as_str() {
+        if s != creds.short_id {
+            creds.short_id = s.to_string();
+            changed = true;
+        }
+    }
+    Ok(changed)
 }
 
 fn ws_to_http(ws: &str) -> String {
@@ -189,7 +225,8 @@ pub async fn line_login_wait(relay: &str, state: &str) -> Result<MachineCreds> {
             }
             let token = v["token"].as_str().ok_or_else(|| anyhow!("hub ไม่คืน token"))?.to_string();
             let tunnel_id = v["tunnel_id"].as_str().ok_or_else(|| anyhow!("hub ไม่คืน tunnel_id"))?.to_string();
-            return Ok(MachineCreds { tunnel_id, token });
+            let short_id = v["short_id"].as_str().unwrap_or("").to_string();
+            return Ok(MachineCreds { tunnel_id, token, short_id });
         } else {
             let status = resp.status().as_u16();
             let msg = resp.text().await.unwrap_or_default();

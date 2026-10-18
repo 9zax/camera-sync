@@ -84,6 +84,7 @@ export interface AdminEvent {
   ready: number
   pending: number
   faces_done: number
+  cover_photo_id?: string | null
 }
 
 export interface FaceSearchResult {

@@ -84,3 +84,24 @@ pub fn bearer_token(headers: &HeaderMap) -> Option<String> {
     let v = headers.get(axum::http::header::AUTHORIZATION)?.to_str().ok()?;
     v.strip_prefix("Bearer ").map(|s| s.trim().to_string())
 }
+
+/// Short photographer id from the saved hub machine session (written by the
+/// desktop app). Used to prefix new event slugs so every guest link carries
+/// the photographer's identity: {short}-{folder}-{rand}.
+pub fn machine_short_id(data_dir: &std::path::Path) -> String {
+    let Ok(text) = std::fs::read_to_string(data_dir.join("machine-session.json")) else {
+        return String::new();
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return String::new();
+    };
+    v["short_id"]
+        .as_str()
+        .unwrap_or("")
+        .trim()
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(8)
+        .collect()
+}

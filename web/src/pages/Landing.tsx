@@ -323,7 +323,7 @@ export default function Landing() {
         >
           <motion.div variants={reveal}>
             <span className="inline-flex items-center gap-2 rounded-md border border-[var(--rule)] bg-lacquer-deep px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-patina">
-              <Sparkles className="size-3.5 text-gold" /> พร้อมใช้งานกับงานถัดไปของคุณ
+               พร้อมใช้งานกับงานถัดไปของคุณ
             </span>
           </motion.div>
           <motion.h2
