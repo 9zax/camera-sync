@@ -449,40 +449,46 @@ async fn line_me_page(State(st): State<SharedHub>, headers: HeaderMap) -> Respon
         r##"<!doctype html><html lang="th"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>งานของฉัน — CameraSync</title>
-<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600&family=Noto+Serif+Thai:wght@600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600&family=Kanit:wght@200;300;400;500&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
-body{{font-family:Anuphan,system-ui,sans-serif;background:#faf7f2;color:#2a2420;line-height:1.6}}
+body{{font-family:Anuphan,"Noto Sans Thai",system-ui,sans-serif;background:oklch(7% .006 95);color:oklch(88% 0 0);line-height:1.7}}
 .wrap{{max-width:880px;margin:0 auto;padding:0 20px}}
-header{{display:flex;align-items:center;justify-content:space-between;padding:20px 0}}
+header{{display:flex;align-items:center;justify-content:space-between;padding:18px 0;border-bottom:1px solid oklch(78% 0 0/.16)}}
 .brand{{display:flex;align-items:center;gap:11px;text-decoration:none;color:inherit}}
-.brand h1{{font-size:18px}}
-.kicker{{display:inline-flex;align-items:center;gap:10px;font-size:11px;font-weight:600;letter-spacing:.28em;text-transform:uppercase;color:#c9a24b}}
-.kicker::before,.kicker::after{{content:"";width:30px;height:1px;background:rgba(201,162,75,.35)}}
-h2.title{{font-family:"Noto Serif Thai",Georgia,serif;font-size:clamp(26px,4.6vw,38px);font-weight:600;margin:18px 0 6px;letter-spacing:-.01em}}
-.count{{color:#6f6760;font-size:14px}}
+.brand h1{{font-family:Kanit,sans-serif;font-size:17px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:oklch(91% 0 0)}}
+.brand p{{font-size:11px;color:oklch(62% 0 0);margin-top:-3px}}
+.kicker{{display:inline-flex;align-items:center;gap:10px;font-family:"Roboto Mono",monospace;font-size:.68rem;font-weight:500;letter-spacing:.24em;text-transform:uppercase;color:oklch(84% .19 80.46)}}
+.kicker::before,.kicker::after{{content:"";width:30px;height:1px;background:oklch(74% .09 82/.6)}}
+h2.title{{font-family:Kanit,"Noto Sans Thai",sans-serif;font-size:clamp(26px,4.6vw,38px);font-weight:300;margin:18px 0 6px;color:oklch(91% 0 0)}}
+h2.title em{{font-style:normal;color:oklch(84% .19 80.46)}}
+.count{{color:oklch(72% 0 0);font-size:14px}}
+.count b{{color:oklch(70% .12 188);font-weight:500}}
 .grid{{display:grid;gap:16px;margin-top:26px}}
-.card{{display:flex;gap:20px;background:#fffdf9;border:1px solid #e8dfd3;border-radius:20px;padding:20px;align-items:center;flex-wrap:wrap}}
-.card:hover{{box-shadow:0 20px 40px -24px rgba(42,36,32,.35)}}
-.qrbox img{{width:150px;height:150px;border-radius:14px;border:1px solid #e8dfd3;background:#fff;display:block}}
+.card{{display:flex;gap:20px;background:oklch(11% .006 95);border:1px solid oklch(78% 0 0/.16);border-radius:6px;padding:20px;align-items:center;flex-wrap:wrap;transition:border-color .2s}}
+.card:hover{{border-color:oklch(74% .09 82/.6)}}
+.qrbox img{{width:150px;height:150px;border-radius:4px;border:1px solid oklch(78% 0 0/.22);background:#fff;display:block}}
 .meta{{flex:1;min-width:230px}}
-.meta h3{{font-family:"Noto Serif Thai",Georgia,serif;font-size:18px;font-weight:600;word-break:break-all}}
-.url{{font-family:ui-monospace,monospace;font-size:12px;color:#6f6760;margin:4px 0 12px;word-break:break-all}}
+.meta h3{{font-family:Kanit,"Noto Sans Thai",sans-serif;font-size:18px;font-weight:400;word-break:break-all;color:oklch(91% 0 0)}}
+.url{{font-family:ui-monospace,monospace;font-size:12px;color:oklch(72% 0 0);margin:4px 0 12px;word-break:break-all}}
 .row{{display:flex;gap:8px;flex-wrap:wrap}}
-.btn{{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:999px;padding:10px 16px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;text-decoration:none;background:linear-gradient(135deg,#a0685f,#7e4e49);color:#fdf9f4}}
-.btn.ghost{{background:#fffdf9;color:#2a2420;border:1px solid #e8dfd3}}
-.hint{{font-size:11.5px;color:#6f6760;margin-top:10px}}
-.empty{{background:#fffdf9;border:1px dashed #d8c9b8;border-radius:20px;padding:34px;text-align:center;margin-top:26px}}
-.empty p{{margin:6px 0}}
-footer{{border-top:1px solid #e8dfd3;margin-top:34px;padding:18px 0 30px;text-align:center;font-size:12.5px;color:#6f6760}}
+.btn{{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:4px;padding:10px 16px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;text-decoration:none;background:oklch(84% .19 80.46);color:oklch(4% .004 95)}}
+.btn:hover{{background:oklch(86% .07 84)}}
+.btn.ghost{{background:transparent;color:oklch(84% .19 80.46);border:1px solid oklch(74% .09 82/.6)}}
+.hint{{font-size:11.5px;color:oklch(62% 0 0);margin-top:10px}}
+.empty{{background:oklch(11% .006 95);border:1px dashed oklch(78% 0 0/.3);border-radius:6px;padding:34px;text-align:center;margin-top:26px}}
+.empty p{{margin:6px 0;color:oklch(72% 0 0)}}
+.empty p:first-child b{{color:oklch(84% .19 80.46);font-weight:500}}
+footer{{border-top:1px solid oklch(78% 0 0/.16);margin-top:34px;padding:18px 0 30px;text-align:center;font-size:12.5px;color:oklch(62% 0 0);background:oklch(4% .004 95)}}
+footer a{{color:oklch(72% 0 0)}}
 </style></head><body><div class="wrap">
 <header>
-  <a class="brand" href="/"><svg width="38" height="38" viewBox="0 0 512 512" style="display:block"><rect width="512" height="512" rx="118" fill="#8e5a54"/><circle cx="256" cy="252" r="122" fill="none" stroke="#FAF7F2" stroke-width="24"/><circle cx="352" cy="180" r="26" fill="#E9C46A"/><path fill="#FAF7F2" d="M256 316 C 212 283 186 258 186 228 C 186 206 203 190 224 190 C 238 190 249 197 256 209 C 263 197 274 190 288 190 C 309 190 326 206 326 228 C 326 258 300 283 256 316 Z"/></svg>
+  <a class="brand" href="/"><svg width="38" height="38" viewBox="0 0 512 512" style="display:block"><rect width="512" height="512" rx="118" fill="#E2B15C"/><circle cx="256" cy="252" r="122" fill="none" stroke="#241E1A" stroke-width="24"/><circle cx="352" cy="180" r="26" fill="#5FBDBD"/><path fill="#241E1A" d="M256 316 C 212 283 186 258 186 228 C 186 206 203 190 224 190 C 238 190 249 197 256 209 C 263 197 274 190 288 190 C 309 190 326 206 326 228 C 326 258 300 283 256 316 Z"/></svg>
   <div><h1>CameraSync</h1><p style="font-size:11.5px;color:#6f6760">งานของฉัน · {username}</p></div></a>
 </header>
 <span class="kicker">My Events</span>
 <h2 class="title">QR ทุกงานของคุณ <em style="font-style:italic;color:#8e5a54">ในหน้าเดียว</em></h2>
-<p class="count">{me_count} — รายการอัปเดตจากเครื่องที่เชื่อมต่ออยู่ของคุณ</p>
+<p class="count"><b>{me_count}</b> — รายการอัปเดตจากเครื่องที่เชื่อมต่ออยู่ของคุณ</p>
 <div class="grid">{cards}{empty}</div>
 <footer>CameraSync — รูปทั้งหมดอยู่บนเครื่องคุณ เราเป็นเพียงทางผ่าน · <a href="/" style="color:inherit;font-weight:600">หน้าแรก</a></footer>
 </div>{reload}</body></html>"##

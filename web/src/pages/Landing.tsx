@@ -89,7 +89,7 @@ const stats = [
 
 function Kicker({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-gold">
+    <span className="inline-flex items-center gap-3 font-mono text-[10.5px] font-medium uppercase tracking-[0.22em] text-gold">
       <span className="h-px w-8 bg-gold/60" />
       {children}
       <span className="h-px w-8 bg-gold/60" />
@@ -149,7 +149,7 @@ export default function Landing() {
               ฟีเจอร์ทั้งหมด
               <span className="absolute -bottom-1 left-0 h-px w-0 bg-gold transition-all duration-300 group-hover:w-full" />
             </a>
-            <Button asChild size="sm" className="rounded-full px-5 shadow-[0_6px_18px_-8px_oklch(0.52_0.082_25/0.55)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_26px_-8px_oklch(0.52_0.082_25/0.6)]">
+            <Button asChild size="sm" className="rounded-md px-5 transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_48px_oklch(2%_0.004_95/0.4)]">
               <Link to="/admin">
                 เข้าสู่ระบบช่างภาพ <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
@@ -161,7 +161,7 @@ export default function Landing() {
       {/* hero */}
       <section ref={heroRef} className="relative overflow-hidden">
         <motion.div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(58%_44%_at_50%_0%,oklch(0.52_0.082_25/0.10),transparent),radial-gradient(30%_26%_at_85%_18%,oklch(0.78_0.09_85/0.10),transparent)]"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(58%_44%_at_50%_0%,oklch(84%_0.19_80.46/0.07),transparent),radial-gradient(30%_26%_at_85%_18%,oklch(70%_0.12_188/0.06),transparent)]"
           style={{ scale: glowScale }}
           aria-hidden
         />
@@ -181,12 +181,12 @@ export default function Landing() {
 
             <motion.h1
               variants={reveal}
-              className="mt-7 font-display text-[2.9rem] font-semibold leading-[1.08] tracking-tight text-foreground sm:text-7xl"
+              className="mt-7 font-display text-[2.9rem] font-light leading-[1.05] tracking-tight text-foreground sm:text-7xl"
             >
               ภาพงานแต่งของคุณ
               <br />
-              <span className="relative inline-block text-primary">
-                <span className="italic">ออนไลน์ทันที</span>
+              <span className="relative inline-block text-gold">
+                <span>ออนไลน์ทันที</span>
                 <motion.span
                   className="absolute -bottom-2 left-0 h-[3px] w-full origin-left rounded-full bg-gradient-to-r from-gold/0 via-gold to-gold/0"
                   initial={{ scaleX: 0 }}
@@ -207,13 +207,13 @@ export default function Landing() {
             </motion.p>
 
             <motion.div variants={reveal} className="mt-10 flex flex-wrap items-center justify-center gap-3.5">
-              <Button asChild size="lg" className="group rounded-full px-8 text-[15px] shadow-[0_14px_30px_-12px_oklch(0.52_0.082_25/0.65)] transition-all hover:-translate-y-0.5 hover:shadow-[0_20px_38px_-12px_oklch(0.52_0.082_25/0.7)]">
+              <Button asChild size="lg" className="group rounded-md px-8 text-[15px] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_48px_oklch(2%_0.004_95/0.4)]">
                 <Link to="/admin">
                   <Camera className="mr-2 size-[18px]" /> เริ่มงานแรกของคุณ
                 </Link>
               </Button>
-              <motion.a href="#how" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-                <Button size="lg" variant="outline" className="rounded-full px-8 text-[15px]">
+              <motion.a href="#how" whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>
+                <Button size="lg" variant="outline" className="rounded-md px-8 text-[15px]">
                   ดูวิธีทำงาน
                 </Button>
               </motion.a>
@@ -249,7 +249,7 @@ export default function Landing() {
           <motion.div variants={reveal} className="text-center">
             <Kicker>How it works</Kicker>
             <h2 className="mt-6 font-display text-3xl font-semibold tracking-tight sm:text-[2.6rem] sm:leading-tight">
-              สามขั้นตอน <span className="italic text-primary">ง่ายกว่าที่คิด</span>
+              สามขั้นตอน <span className="text-gold">ง่ายกว่าที่คิด</span>
             </h2>
           </motion.div>
 
@@ -261,7 +261,7 @@ export default function Landing() {
                 <div className="relative z-10 mx-auto flex size-14 items-center justify-center rounded-full border border-gold/40 bg-card shadow-[0_10px_26px_-14px_oklch(0.78_0.09_85/0.5)] transition-transform duration-500 group-hover:-translate-y-1 md:mx-0">
                   <s.icon className="size-6 text-primary" strokeWidth={1.7} />
                 </div>
-                <div className="mt-6 font-display text-sm font-semibold tracking-[0.3em] text-gold">{s.n}</div>
+                <div className="mt-6 font-mono text-xs font-medium tracking-[0.3em] text-gold">{s.n}</div>
                 <h3 className="mt-2.5 font-display text-xl font-semibold leading-snug">{s.title}</h3>
                 <p className="mx-auto mt-3 max-w-sm text-[14px] leading-relaxed text-muted-foreground md:mx-0">{s.desc}</p>
               </motion.div>
@@ -276,7 +276,7 @@ export default function Landing() {
           <motion.div variants={reveal} className="text-center">
             <Kicker>Everything included</Kicker>
             <h2 className="mt-6 font-display text-3xl font-semibold tracking-tight sm:text-[2.6rem] sm:leading-tight">
-              ครบทุกอย่าง <span className="italic text-primary">ในลิงก์เดียว</span>
+              ครบทุกอย่าง <span className="text-gold">ในลิงก์เดียว</span>
             </h2>
           </motion.div>
 
@@ -287,8 +287,8 @@ export default function Landing() {
                 variants={reveal}
                 className="group flex gap-5 border-b border-border/60 py-7 transition-colors hover:bg-accent/25"
               >
-                <span className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/[0.07] ring-1 ring-primary/15 transition-all duration-500 group-hover:bg-primary/10 group-hover:ring-gold/40">
-                  <f.icon className="size-5 text-primary" strokeWidth={1.8} />
+                <span className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full bg-secondary ring-1 ring-[var(--rule-strong)] transition-all duration-500 group-hover:bg-accent">
+                  <f.icon className="size-5 text-gold" strokeWidth={1.6} />
                 </span>
                 <div>
                   <h3 className="font-display text-[17px] font-semibold leading-snug">{f.title}</h3>
@@ -301,9 +301,9 @@ export default function Landing() {
       </Section>
 
       {/* CTA band */}
-      <section className="relative overflow-hidden bg-foreground py-24 text-background sm:py-28">
+      <section className="relative overflow-hidden border-y border-[var(--rule-strong)] bg-card py-24 sm:py-28">
         <div
-          className="pointer-events-none absolute inset-0 opacity-60 [background-image:radial-gradient(46%_60%_at_50%_0%,oklch(0.52_0.082_25/0.4),transparent),radial-gradient(26%_36%_at_82%_88%,oklch(0.78_0.09_85/0.16),transparent)]"
+          className="pointer-events-none absolute inset-0 [background-image:radial-gradient(46%_60%_at_50%_0%,oklch(84%_0.19_80.46/0.10),transparent),radial-gradient(26%_36%_at_82%_88%,oklch(70%_0.12_188/0.10),transparent)]"
           aria-hidden
         />
         <motion.div
@@ -314,7 +314,7 @@ export default function Landing() {
           className="relative mx-auto max-w-3xl px-5 text-center"
         >
           <motion.div variants={reveal}>
-            <span className="inline-flex items-center gap-2 rounded-full border border-background/20 bg-background/5 px-4 py-1.5 text-xs text-background/80 backdrop-blur">
+            <span className="inline-flex items-center gap-2 rounded-md border border-[var(--rule)] bg-lacquer-deep px-4 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-patina">
               <Sparkles className="size-3.5 text-gold" /> พร้อมใช้งานกับงานถัดไปของคุณ
             </span>
           </motion.div>
@@ -324,10 +324,10 @@ export default function Landing() {
           >
             ให้ทุกช็อตของคืนนั้น
             <br />
-            <span className="italic text-gold">ไปถึงมือทุกคน</span> ในคืนเดียวกัน
+            <span className="text-gold">ไปถึงมือทุกคน</span> ในคืนเดียวกัน
           </motion.h2>
           <motion.div variants={reveal} className="mt-10">
-            <Button asChild size="lg" className="rounded-full bg-background px-8 text-[15px] font-semibold text-foreground transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_36px_-12px_rgba(0,0,0,0.5)]">
+            <Button asChild size="lg" className="rounded-md bg-gold px-8 text-[15px] font-semibold text-lacquer-deep transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_48px_oklch(2%_0.004_95/0.4)]">
               <Link to="/admin">
                 เริ่มใช้งานฟรี <ArrowRight className="ml-1 size-4" />
               </Link>
@@ -342,7 +342,7 @@ export default function Landing() {
           <Logo size={32} />
           <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
             แกลเลอรีงานแต่งสด + ค้นหารูปด้วยเซลฟี่ — ขับเคลื่อนด้วยใจรัก
-            <Heart className="size-3.5 fill-primary text-primary" />
+            <Heart className="size-3.5 fill-patina text-patina" />
           </p>
           <p className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground/70">
             <LogoMark size={14} /> CameraSync

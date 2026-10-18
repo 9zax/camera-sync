@@ -105,7 +105,7 @@ function Card({
       onClick={onPick}
       onHoverStart={() => setHover(true)}
       onHoverEnd={() => setHover(false)}
-      className="group relative block shrink-0 cursor-grab rounded-2xl bg-card p-1.5 text-left shadow-[0_16px_36px_-16px_rgb(60_35_30/0.5)] ring-1 ring-black/[0.06] outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+      className="group relative block shrink-0 cursor-grab rounded-2xl bg-card p-1.5 text-left ring-1 ring-[oklch(78%_0_0/0.16)] outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
       style={{ width: CARD_W, height: CARD_H, transformPerspective: 900, zIndex: picked ? 30 : hover ? 20 : 1 }}
       animate={
         picked
@@ -189,7 +189,7 @@ function DriftCard({ card }: { card: (typeof CARDS)[number] }) {
     <motion.button
       onHoverStart={() => setHover(true)}
       onHoverEnd={() => setHover(false)}
-      className="group relative block shrink-0 cursor-grab rounded-2xl bg-card p-1.5 text-left shadow-[0_16px_36px_-16px_rgb(60_35_30/0.5)] ring-1 ring-black/[0.06] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group relative block shrink-0 cursor-grab rounded-2xl bg-card p-1.5 text-left ring-1 ring-[oklch(78%_0_0/0.16)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
       style={{ width: CARD_W, height: CARD_H, transformPerspective: 900, zIndex: hover ? 20 : 1 }}
       animate={{ rotate: hover ? 0 : card.tilt, scale: hover ? 1.07 : 1, y: hover ? -26 : 0 }}
       transition={{ type: "spring", stiffness: 260, damping: 20 }}
@@ -257,9 +257,9 @@ export function ObjectsShowcase() {
 
   return (
     <section className="relative overflow-hidden border-t border-border/50 py-16">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_60%_at_50%_40%,oklch(0.52_0.082_25/0.05),transparent)]" aria-hidden />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_60%_at_50%_40%,oklch(84%_0.19_80.46/0.05),transparent)]" aria-hidden />
       <div className="relative mx-auto mb-9 max-w-6xl px-5 text-center">
-        <span className="inline-flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-gold">
+        <span className="inline-flex items-center gap-3 font-mono text-[10.5px] font-medium uppercase tracking-[0.22em] text-gold">
           <span className="h-px w-8 bg-gold/60" /> Live preview <span className="h-px w-8 bg-gold/60" />
         </span>
         <h2 className="mt-5 font-display text-2xl font-semibold tracking-tight sm:text-4xl">

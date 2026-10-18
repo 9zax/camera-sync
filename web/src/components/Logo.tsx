@@ -20,15 +20,16 @@ export function LogoMark({
     >
       <defs>
         <linearGradient id="cs-bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#A0685F" />
-          <stop offset="1" stopColor="#7E4E49" />
+          <stop offset="0" stopColor="#F0C97E" />
+          <stop offset=".55" stopColor="#E2B15C" />
+          <stop offset="1" stopColor="#C99544" />
         </linearGradient>
       </defs>
       <rect width="512" height="512" rx="118" fill="url(#cs-bg)" />
-      <circle cx="256" cy="252" r="122" fill="none" stroke="#FAF7F2" strokeWidth="24" />
-      <circle cx="352" cy="180" r="26" fill="#E9C46A" />
+      <circle cx="256" cy="252" r="122" fill="none" stroke="#241E1A" strokeWidth="24" />
+      <circle cx="352" cy="180" r="26" fill="#5FBDBD" />
       <path
-        fill="#FAF7F2"
+        fill="#241E1A"
         d="M256 316 C 212 283 186 258 186 228 C 186 206 203 190 224 190 C 238 190 249 197 256 209 C 263 197 274 190 288 190 C 309 190 326 206 326 228 C 326 258 300 283 256 316 Z"
       />
     </svg>

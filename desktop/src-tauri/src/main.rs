@@ -178,7 +178,24 @@ async fn collect_events() -> Vec<EventLink> {
 }
 
 fn read_local_admin() -> Option<(String, String)> {
-    let s = std::fs::read_to_string(default_data_dir().join("local-admin.txt")).ok()?;
+    let dir = default_data_dir();
+    // .env (ADMIN_USER / ADMIN_PASS) is the source of truth; legacy txt as fallback
+    if let Ok(text) = std::fs::read_to_string(dir.join(".env")) {
+        let mut user = None;
+        let mut pass = None;
+        for line in text.lines() {
+            let line = line.trim();
+            if let Some(v) = line.strip_prefix("ADMIN_USER=") {
+                user = Some(v.trim().to_string()).filter(|v| !v.is_empty());
+            } else if let Some(v) = line.strip_prefix("ADMIN_PASS=") {
+                pass = Some(v.trim().to_string()).filter(|v| !v.is_empty());
+            }
+        }
+        if let (Some(u), Some(p)) = (user, pass) {
+            return Some((u, p));
+        }
+    }
+    let s = std::fs::read_to_string(dir.join("local-admin.txt")).ok()?;
     let mut it = s.trim().splitn(2, " / ");
     let u = it.next()?.to_string();
     let p = it.next()?.trim().to_string();

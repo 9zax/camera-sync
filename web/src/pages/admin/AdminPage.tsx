@@ -310,7 +310,7 @@ function EventCard({ event, index = 0 }: { event: AdminEvent; index?: number }) 
               <motion.span
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="absolute left-2 top-2 rounded-full bg-amber-600/90 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur"
+                className="absolute left-2 top-2 rounded-full bg-patina/90 px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-lacquer-deep backdrop-blur"
               >
                 ออฟไลน์ — พักลิงก์ชั่วคราว
               </motion.span>
@@ -337,13 +337,13 @@ function EventCard({ event, index = 0 }: { event: AdminEvent; index?: number }) 
           </CardContent>
         </Link>
         <div className="flex items-center gap-1.5 px-5 pb-4 pt-1">
-          <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={() => setQrOpen(true)}>
+          <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-md px-2.5 text-xs" onClick={() => setQrOpen(true)}>
             <QrCode className="size-3.5" /> QR
           </Button>
           <Button
             variant="outline"
             size="sm"
-            className="h-7 gap-1.5 px-2.5 text-xs"
+            className="h-8 gap-1.5 rounded-md px-2.5 text-xs"
             disabled={toggle.isPending}
             onClick={() => toggle.mutate()}
           >
@@ -352,7 +352,7 @@ function EventCard({ event, index = 0 }: { event: AdminEvent; index?: number }) 
           <Button
             variant="ghost"
             size="sm"
-            className="ml-auto h-7 gap-1 px-2.5 text-xs text-destructive hover:text-destructive"
+            className="ml-auto h-8 gap-1 rounded-md px-2.5 text-xs text-destructive hover:text-destructive"
             disabled={remove.isPending}
             onClick={() => {
               if (confirm(`ลบงาน "${event.title}" ? ลิงก์แขกจะใช้ไม่ได้ทันที`)) remove.mutate()

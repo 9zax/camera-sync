@@ -108,6 +108,24 @@ pub async fn start_saved_imports() {
 /// first run creates `studio` with a random password saved to
 /// `<data>/local-admin.txt` (0600) so the UI can show it.
 pub async fn ensure_local_admin(st: &SharedState) -> anyhow::Result<Option<(String, String)>> {
+    // a pre-set .env wins: the photographer can bring their own credentials
+    if let Some(creds) = read_admin_env(&st.cfg.data_dir) {
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+            .fetch_one(&st.pool)
+            .await?;
+        if count == 0 {
+            let hash = auth::hash_password(&creds.1)?;
+            sqlx::query("INSERT INTO users(id, username, password_hash, created_at) VALUES (?1,?2,?3,?4)")
+                .bind(crate::util::new_id())
+                .bind(&creds.0)
+                .bind(&hash)
+                .bind(crate::util::now_ms())
+                .execute(&st.pool)
+                .await?;
+            tracing::info!("created local admin '{}' from .env", creds.0);
+        }
+        return Ok(Some(creds));
+    }
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(&st.pool)
         .await?;
@@ -122,25 +140,59 @@ pub async fn ensure_local_admin(st: &SharedState) -> anyhow::Result<Option<(Stri
         .bind(crate::util::now_ms())
         .execute(&st.pool)
         .await?;
-    let file = st.cfg.data_dir.join("local-admin.txt");
-    tokio::fs::write(&file, format!("studio / {password}\n")).await.ok();
+    let creds = ("studio".to_string(), password);
+    write_admin_env(&st.cfg.data_dir, &creds).await;
+    // legacy migration: drop the old plaintext format
+    let _ = tokio::fs::remove_file(st.cfg.data_dir.join("local-admin.txt")).await;
+    tracing::info!("auto-created local admin 'studio' (saved to .env)");
+    Ok(Some(creds))
+}
+
+fn parse_env_creds(text: &str) -> Option<(String, String)> {
+    let mut user = None;
+    let mut pass = None;
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(v) = line.strip_prefix("ADMIN_USER=") {
+            user = Some(v.trim().to_string()).filter(|v| !v.is_empty());
+        } else if let Some(v) = line.strip_prefix("ADMIN_PASS=") {
+            pass = Some(v.trim().to_string()).filter(|v| !v.is_empty());
+        }
+    }
+    match (user, pass) {
+        (Some(u), Some(p)) => Some((u, p)),
+        _ => None,
+    }
+}
+
+fn read_admin_env(data_dir: &std::path::Path) -> Option<(String, String)> {
+    let text = std::fs::read_to_string(data_dir.join(".env")).ok()?;
+    // fall back to the legacy local-admin.txt ("user / pass") when .env is absent
+    if text.trim().is_empty() {
+        let legacy = std::fs::read_to_string(data_dir.join("local-admin.txt")).ok()?;
+        let mut it = legacy.trim().splitn(2, " / ");
+        let u = it.next()?.trim().to_string();
+        let p = it.next()?.trim().to_string();
+        return Some((u, p));
+    }
+    parse_env_creds(&text)
+}
+
+async fn write_admin_env(data_dir: &std::path::Path, creds: &(String, String)) {
+    let file = data_dir.join(".env");
+    tokio::fs::write(&file, format!("ADMIN_USER={}\nADMIN_PASS={}\n", creds.0, creds.1))
+        .await
+        .ok();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).ok();
     }
-    tracing::info!("auto-created local admin 'studio' (saved to local-admin.txt)");
-    Ok(Some(("studio".into(), password)))
 }
 
-/// Read the auto-provisioned local admin credentials (for UI display).
+/// Read the local admin credentials (for UI display) from `<data>/.env`.
 pub async fn read_local_admin(st: &SharedState) -> Option<(String, String)> {
-    let file = st.cfg.data_dir.join("local-admin.txt");
-    let s = tokio::fs::read_to_string(file).await.ok()?;
-    let mut it = s.trim().splitn(2, " / ");
-    let u = it.next()?.to_string();
-    let p = it.next()?.trim().to_string();
-    Some((u, p))
+    read_admin_env(&st.cfg.data_dir)
 }
 
 /// Run the full photo-drive server (API + pipeline + SPA) on the

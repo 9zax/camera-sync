@@ -116,7 +116,7 @@ export default function GuestEvent() {
       {/* header */}
       <header className="relative overflow-hidden border-b border-border/60 bg-gradient-to-b from-secondary/70 to-background">
         <div
-          className="pointer-events-none absolute inset-0 [background-image:radial-gradient(42%_60%_at_50%_0%,oklch(0.52_0.082_25/0.07),transparent),radial-gradient(22%_30%_at_88%_12%,oklch(0.78_0.09_85/0.10),transparent)]"
+          className="pointer-events-none absolute inset-0 [background-image:radial-gradient(42%_60%_at_50%_0%,oklch(84%_0.19_80.46/0.06),transparent),radial-gradient(22%_30%_at_88%_12%,oklch(70%_0.12_188/0.07),transparent)]"
           aria-hidden
         />
         <Heart
@@ -129,7 +129,7 @@ export default function GuestEvent() {
           initial="hidden"
           animate="show"
         >
-          <motion.p variants={riseIn} className="mb-3 inline-flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-gold">
+          <motion.p variants={riseIn} className="mb-3 inline-flex items-center gap-3 font-mono text-[10.5px] font-medium uppercase tracking-[0.22em] text-gold">
             <span className="h-px w-7 bg-gold/60" /> Wedding Gallery <span className="h-px w-7 bg-gold/60" />
           </motion.p>
           <motion.h1 variants={riseIn} className="font-display text-4xl font-semibold tracking-tight sm:text-[3.4rem] sm:leading-[1.1]">
@@ -186,10 +186,10 @@ export default function GuestEvent() {
             transition={{ delay: 0.25, duration: 0.4 }}
           >
             <TabsList className="mx-auto mb-8 grid w-full max-w-md grid-cols-2 rounded-full border border-border/70 bg-secondary/60 p-1 shadow-sm">
-              <TabsTrigger value="gallery" className="rounded-full py-2.5 font-medium data-[state=active]:shadow-[0_8px_20px_-8px_oklch(0.52_0.082_25/0.55)]">
+              <TabsTrigger value="gallery" className="rounded-full py-2.5 font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]">
                 <Images className="mr-2 size-4" /> แกลเลอรี
               </TabsTrigger>
-              <TabsTrigger value="me" className="rounded-full py-2.5 font-medium data-[state=active]:shadow-[0_8px_20px_-8px_oklch(0.52_0.082_25/0.55)]" disabled={!info.face_enabled}>
+              <TabsTrigger value="me" className="rounded-full py-2.5 font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]" disabled={!info.face_enabled}>
                 <ScanFace className="mr-2 size-4" /> หารูปตัวเอง
               </TabsTrigger>
             </TabsList>
