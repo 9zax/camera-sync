@@ -41,14 +41,67 @@ pub fn default_hub() -> String {
     std::env::var("CAMERASYNC_HUB").unwrap_or_else(|_| "wss://sync.khunaistory.com".into())
 }
 
+/// Bind a folder to an event in `import_dirs` (idempotent per path) so app
+/// restarts reuse the same event instead of creating duplicates.
+async fn remember_import_dir(st: &SharedState, dir: &PathBuf, event_id: &str) -> anyhow::Result<()> {
+    let path = dir.display().to_string();
+    let existing: Option<(String,)> =
+        sqlx::query_as("SELECT event_id FROM import_dirs WHERE path = ?1")
+            .bind(&path)
+            .fetch_optional(&st.pool)
+            .await?;
+    match existing {
+        Some((old,)) if old == event_id => {}
+        Some((old,)) => {
+            sqlx::query("UPDATE import_dirs SET event_id=?1 WHERE path=?2")
+                .bind(event_id)
+                .bind(&path)
+                .execute(&st.pool)
+                .await?;
+            let _ = old;
+        }
+        None => {
+            sqlx::query("INSERT INTO import_dirs(id, path, event_id, created_at) VALUES (?1,?2,?3,?4)")
+                .bind(crate::util::new_id())
+                .bind(&path)
+                .bind(event_id)
+                .bind(crate::util::now_ms())
+                .execute(&st.pool)
+                .await?;
+        }
+    }
+    Ok(())
+}
+
 /// Watch an additional local folder (desktop app "เพิ่มโฟลเดอร์รูป").
+/// The folder is remembered in `import_dirs` so app restarts keep watching it.
 pub async fn add_import_dir(dir: PathBuf, event: Option<String>) -> anyhow::Result<String> {
     let st = server_state().ok_or_else(|| anyhow::anyhow!("server not started"))?;
     let dir = dir.canonicalize().unwrap_or(dir);
     anyhow::ensure!(dir.is_dir(), "{} ไม่ใช่โฟลเดอร์", dir.display());
     let event_id = importer::resolve_or_create_event(&st, &event, &dir).await?;
+    remember_import_dir(&st, &dir, &event_id).await?;
     importer::start(st, dir, event_id.clone());
     Ok(event_id)
+}
+
+/// Re-attach folder watchers saved by `add_import_dir` (desktop app launch).
+pub async fn start_saved_imports() {
+    let Some(st) = server_state() else { return };
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT path, event_id FROM import_dirs ORDER BY created_at")
+            .fetch_all(&st.pool)
+            .await
+            .unwrap_or_default();
+    for (path, event_id) in rows {
+        let dir = PathBuf::from(&path);
+        if !dir.is_dir() {
+            println!("  ⚠ saved import folder missing, skipped: {path}");
+            continue;
+        }
+        println!("  ◉ resumed watching {path}");
+        importer::start(st.clone(), dir, event_id);
+    }
 }
 
 /// Local admin auto-provisioning for the desktop app (zero-input setup):
@@ -196,6 +249,7 @@ pub async fn run_server(
         let dir = dir.canonicalize().unwrap_or(dir);
         anyhow::ensure!(dir.is_dir(), "--import-dir {} ไม่ใช่โฟลเดอร์", dir.display());
         let event_id = importer::resolve_or_create_event(&state, &import_event, &dir).await?;
+        remember_import_dir(&state, &dir, &event_id).await?;
         importer::start(state.clone(), dir.clone(), event_id);
     }
 

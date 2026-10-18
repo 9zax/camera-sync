@@ -28,5 +28,13 @@ pub async fn init_pool(cfg: &Config) -> anyhow::Result<SqlitePool> {
             .execute(&pool)
             .await?;
     }
+    // folders the photographer added in the desktop app — replayed on launch
+    sqlx::raw_sql(
+        "CREATE TABLE IF NOT EXISTS import_dirs(\
+           id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, \
+           event_id TEXT NOT NULL, created_at INTEGER NOT NULL)",
+    )
+    .execute(&pool)
+    .await?;
     Ok(pool)
 }

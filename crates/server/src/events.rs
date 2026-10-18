@@ -311,12 +311,20 @@ pub async fn delete(
 /// the photographer's own source folder is never touched.
 pub async fn delete_event(st: &SharedState, id: &str) -> Result<String, AppError> {
     let ev = fetch_event(st, id).await?;
+    // stop the folder watcher first so the periodic rescan can't resurrect
+    // this event, and forget the saved import dir
+    crate::importer::stop_event(id);
     let photos: Vec<(String, String)> =
         sqlx::query_as("SELECT orig_hash, ext FROM photos WHERE event_id = ?1")
             .bind(id)
             .fetch_all(&st.pool)
             .await
             .map_err(AppError::from)?;
+    sqlx::query("DELETE FROM import_dirs WHERE event_id = ?1")
+        .bind(id)
+        .execute(&st.pool)
+        .await
+        .map_err(AppError::from)?;
     sqlx::query("DELETE FROM events WHERE id = ?1")
         .bind(id)
         .execute(&st.pool)

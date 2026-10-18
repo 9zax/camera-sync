@@ -273,15 +273,24 @@ pub async fn run_tunnel_forever_status(cfg: TunnelConfig, on_status: StatusCb) -
                 if let Err(e) = ws.send(Message::Text(announce.clone().into())).await {
                     println!("  ↻ announce failed: {e}");
                 }
-                let mut ticker = tokio::time::interval(Duration::from_secs(60));
-                ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                // poll the local manifest frequently but only re-announce when
+                // the event list actually changed — new/deleted events reach
+                // the hub in ~10s instead of waiting for the next keepalive
+                let mut last_sent = std::time::Instant::now();
+                let mut poll = tokio::time::interval(Duration::from_secs(10));
+                poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
                 loop {
                     tokio::select! {
-                        _ = ticker.tick() => {
+                        _ = poll.tick() => {
                             let slugs = fetch_manifest_slugs(&cfg.server, &http).await;
-                            announce = serde_json::json!({ "announce": slugs }).to_string();
-                            let _ = ws.send(Message::Text(announce.clone().into())).await;
+                            let msg = serde_json::json!({ "announce": slugs }).to_string();
+                            if msg != announce || last_sent.elapsed() >= Duration::from_secs(60) {
+                                announce = msg;
+                                if ws.send(Message::Text(announce.clone().into())).await.is_ok() {
+                                    last_sent = std::time::Instant::now();
+                                }
+                            }
                         }
                         msg = ws.next() => {
                             let msg = match msg {

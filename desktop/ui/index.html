@@ -239,7 +239,7 @@
         const face = $("faceDot"), faceT = $("faceText");
         if (s.face_state === "ready") {
           face.className = "dot on";
-          faceT.textContent = "AI หารูปตัวเอง: พร้อมใช้งาน ✓";
+          faceT.textContent = "AI หารูปตัวเอง (ประมวลผลบนเครื่องนี้): พร้อมใช้งาน ✓";
         } else if (s.face_state === "unavailable") {
           face.className = "dot warn";
           faceT.textContent = "AI หารูปตัวเอง: ยังไม่พร้อม — ตรวจอินเทอร์เน็ตแล้วรีสตาร์ตแอป (โหลดโมเดลใหม่)";
@@ -255,8 +255,7 @@
         if (s.events.length) {
           $("linksCard").style.display = "";
           const box = $("links");
-          box.innerHTML = "";
-          for (const ev of s.events) {
+          box.innerHTML = "";          for (const ev of s.events) {
             const url = s.guest_base + "/e/" + ev.slug;
             const row = document.createElement("div");
             row.className = "link-row";
@@ -313,6 +312,10 @@
             };
             box.appendChild(row);
           }
+        } else {
+          $("linksCard").style.display = connected ? "" : "none";
+          $("links").innerHTML =
+            '<p class="sub" style="margin:0">ยังไม่มีงาน — กดปุ่ม "เลือกโฟลเดอร์รูป" ด้านล่างเพื่อเริ่มงานแรก</p>';
         }
         $("adminUrl").textContent = "http://localhost:" + s.port + "/admin";
         $("adminCred").textContent = s.local_admin

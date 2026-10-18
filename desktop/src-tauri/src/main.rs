@@ -406,6 +406,8 @@ fn main() {
                         }
                         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                     }
+                    // replay import folders the photographer added earlier
+                    wedsync_server::start_saved_imports().await;
                     let Some(creds) = read_machine_session() else {
                         return;
                     };

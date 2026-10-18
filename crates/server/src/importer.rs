@@ -5,13 +5,31 @@
 //! every new photo straight into an event — no upload step needed because
 //! the disk is already right here.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use crate::photos;
 use crate::SharedState;
 
 const SUPPORTED: [&str; 4] = ["jpg", "jpeg", "png", "webp"];
+
+// event_id → stop flag, so deleting an event can also stop its folder watcher
+// (otherwise the periodic rescan would resurrect the deleted event)
+fn watchers() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
+    static W: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
+    W.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Stop the folder watcher of a deleted event (idempotent).
+pub fn stop_event(event_id: &str) {
+    if let Some(flag) = watchers().lock().unwrap().remove(event_id) {
+        flag.store(true, Ordering::Relaxed);
+        println!("  ■ stopped watching folder of event {event_id}");
+    }
+}
 
 pub async fn resolve_or_create_event(st: &SharedState, event: &Option<String>, dir: &Path) -> anyhow::Result<String> {
     if let Some(key) = event {
@@ -23,6 +41,25 @@ pub async fn resolve_or_create_event(st: &SharedState, event: &Option<String>, d
             return Ok(ev.id);
         }
         anyhow::bail!("ไม่พบงาน '{key}' — สร้างก่อนที่หน้า /admin หรือตั้งชื่อใหม่ด้วย --event <id หรือ slug>");
+    }
+    // reuse the event already bound to this folder — without this check every
+    // app launch would create a duplicate event for the same watched folder
+    let path = dir.to_string_lossy().to_string();
+    let saved: Option<(String,)> =
+        sqlx::query_as("SELECT event_id FROM import_dirs WHERE path = ?1")
+            .bind(&path)
+            .fetch_optional(&st.pool)
+            .await?;
+    if let Some((eid,)) = saved {
+        let alive: Option<(String,)> = sqlx::query_as("SELECT id FROM events WHERE id = ?1")
+            .bind(&eid)
+            .fetch_optional(&st.pool)
+            .await?;
+        if alive.is_some() {
+            println!("  ✓ ใช้งานเดิมของโฟลเดอร์นี้ต่อ (event {eid})");
+            return Ok(eid);
+        }
+        // stale mapping (event deleted) — create a fresh one; caller rewrites it
     }
     // no event given → create one named after the folder
     let title = dir
@@ -66,10 +103,24 @@ pub async fn resolve_or_create_event(st: &SharedState, event: &Option<String>, d
 }
 
 pub fn start(st: SharedState, dir: PathBuf, event_id: String) {
+    // one watcher per event (run_server's auto-start + saved-imports replay
+    // can both reach here for the same folder)
+    {
+        let mut w = watchers().lock().unwrap();
+        if w.contains_key(&event_id) {
+            return;
+        }
+        w.insert(event_id.clone(), Arc::new(AtomicBool::new(false)));
+    }
+    let stop = watchers().lock().unwrap().get(&event_id).cloned().unwrap();
     tokio::spawn(async move {
         // initial scan
         if let Err(e) = import_dir(&st, &dir, &event_id).await {
             tracing::error!("import scan failed: {e:#}");
+        }
+        if stop.load(Ordering::Relaxed) {
+            watchers().lock().unwrap().remove(&event_id);
+            return;
         }
         println!("  ◉ watching folder {} (new photos are ingested automatically)", dir.display());
 
@@ -82,13 +133,15 @@ pub fn start(st: SharedState, dir: PathBuf, event_id: String) {
         }) {
             Ok(w) => w,
             Err(e) => {
-                tracing::error!("cannot watch folder: {e:#}");
+                tracing::error!("cannot watch folder: {e}");
+                watchers().lock().unwrap().remove(&event_id);
                 return;
             }
         };
         use notify::Watcher;
         if let Err(e) = watcher.watch(&dir, notify::RecursiveMode::Recursive) {
-            tracing::error!("cannot watch {}: {e:#}", dir.display());
+            tracing::error!("cannot watch {}: {e}", dir.display());
+            watchers().lock().unwrap().remove(&event_id);
             return;
         }
 
@@ -99,10 +152,18 @@ pub fn start(st: SharedState, dir: PathBuf, event_id: String) {
             }
             // debounce burst
             while rx.recv_timeout(Duration::from_millis(1200)).is_ok() {}
+            if stop.load(Ordering::Relaxed) {
+                break;
+            }
             if let Err(e) = import_dir(&st, &dir, &event_id).await {
                 tracing::error!("import rescan failed: {e:#}");
             }
+            if stop.load(Ordering::Relaxed) {
+                break;
+            }
         }
+        watchers().lock().unwrap().remove(&event_id);
+        println!("  ■ watcher stopped for {}", dir.display());
     });
 }
 
