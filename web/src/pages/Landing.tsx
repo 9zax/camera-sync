@@ -69,7 +69,7 @@ const steps = [
 ]
 
 const features = [
-  { icon: Zap, title: "รูปขึ้นสดระหว่างงาน", desc: "ช็อตใหม่โผล่บนมือถือลูกค้าหลังกดชัตเตอร์ไม่กี่นาที บรรยากาศงานยังร้อนอยู่เลย" },
+  { icon: Zap, title: "รูปขึ้นแบบ realtime ระหว่างงาน", desc: "ช็อตใหม่โผล่บนมือถือลูกค้าหลังกดชัตเตอร์ไม่กี่นาที บรรยากาศงานยังร้อนอยู่เลย" },
   { icon: ScanFace, title: "หารูปตัวเองใน 5 วินาที", desc: "ไม่ต้องเลื่อนไล่ดูทีละรูป — ถ่ายเซลฟี่แล้วระบบรวมรูปที่มีคุณมาให้ครบในที่เดียว" },
   { icon: UserX, title: "ลูกค้าไม่ต้องติดแอป ไม่ต้องสมัคร", desc: "สแกนแล้วดูได้เลย ไม่มีขั้นตอนสมัครสมาชิก ไม่มีการขอเบอร์หรืออีเมล ใครก็เข้าชมได้" },
   { icon: HardDriveDownload, title: "ไฟล์เต็มความละเอียด ไม่มีลายน้ำ", desc: "โหลดได้ไฟล์เต็มคุณภาพ ไม่มีลายน้ำ ไม่จำกัดจำนวนรูป" },
@@ -115,6 +115,12 @@ function Section({
 
 /* ---------------------------------- page ----------------------------------- */
 
+// One landing page, two contexts: on the photographer's own server the CTAs
+// point into the /admin SPA; on the public hub they point to the LINE login
+// and the .dmg download (routes that only exist there).
+const HUB_HOSTS = ["sync.khunaistory.com", "43.228.126.41"]
+const onHub = HUB_HOSTS.includes(window.location.hostname)
+
 export default function Landing() {
   const reduced = useReducedMotion()
   const { scrollYProgress, scrollY } = useScroll()
@@ -149,11 +155,19 @@ export default function Landing() {
               ฟีเจอร์ทั้งหมด
               <span className="absolute -bottom-1 left-0 h-px w-0 bg-gold transition-all duration-300 group-hover:w-full" />
             </a>
-            <Button asChild size="sm" className="rounded-md px-5 transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_48px_oklch(2%_0.004_95/0.4)]">
-              <Link to="/admin">
-                เข้าสู่ระบบช่างภาพ <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-              </Link>
-            </Button>
+            {onHub ? (
+              <Button asChild size="sm" variant="outline" className="rounded-md border-[var(--rule-strong)] px-5 transition-all hover:-translate-y-0.5">
+                <a href="/r/line/start">
+                  เข้าสู่ระบบด้วย LINE <ArrowRight className="size-4" />
+                </a>
+              </Button>
+            ) : (
+              <Button asChild size="sm" className="rounded-md px-5 transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_48px_oklch(2%_0.004_95/0.4)]">
+                <Link to="/admin">
+                  เข้าสู่ระบบช่างภาพ <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                </Link>
+              </Button>
+            )}
           </nav>
         </div>
       </header>
@@ -188,15 +202,21 @@ export default function Landing() {
               variants={reveal}
               className="mx-auto mt-6 max-w-xl text-pretty text-[15px] leading-relaxed text-foreground/80 drop-shadow-[0_1px_12px_oklch(4%_0.004_95/0.9)] sm:text-base"
             >
-              ถ่ายเสร็จ รูปขึ้นเว็บให้เองระหว่างงาน ลูกค้าสแกน QR ดูรูปสด ๆ
+              ถ่ายเสร็จ รูปขึ้นเว็บให้เองระหว่างงาน ลูกค้าสแกน QR ดูรูปแบบ realtime
               และถ่ายเซลฟี่เพื่อหารูปของตัวเองได้ทันที — จบในลิงก์เดียว
             </motion.p>
             <motion.div variants={reveal} className="mt-8 flex flex-wrap items-center justify-center gap-3.5">
               <span className="pointer-events-auto">
                 <Button asChild size="lg" className="rounded-md px-8 text-[15px] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_48px_oklch(2%_0.004_95/0.5)]">
-                  <Link to="/admin">
-                    <Camera className="mr-2 size-[18px]" /> เริ่มงานแรกของคุณ
-                  </Link>
+                  {onHub ? (
+                    <a href="/download/CameraSync.dmg">
+                      <Camera className="mr-2 size-[18px]" /> ดาวน์โหลดแอปช่างภาพ
+                    </a>
+                  ) : (
+                    <Link to="/admin">
+                      <Camera className="mr-2 size-[18px]" /> เริ่มงานแรกของคุณ
+                    </Link>
+                  )}
                 </Button>
               </span>
               <span className="pointer-events-auto">
@@ -316,9 +336,15 @@ export default function Landing() {
           </motion.h2>
           <motion.div variants={reveal} className="mt-10">
             <Button asChild size="lg" className="rounded-md bg-gold px-8 text-[15px] font-semibold text-lacquer-deep transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_48px_oklch(2%_0.004_95/0.4)]">
-              <Link to="/admin">
-                เริ่มใช้งานฟรี <ArrowRight className="ml-1 size-4" />
-              </Link>
+              {onHub ? (
+                <a href="/download/CameraSync.dmg">
+                  ดาวน์โหลดใช้งานฟรี <ArrowRight className="ml-1 size-4" />
+                </a>
+              ) : (
+                <Link to="/admin">
+                  เริ่มใช้งานฟรี <ArrowRight className="ml-1 size-4" />
+                </Link>
+              )}
             </Button>
           </motion.div>
         </motion.div>
@@ -329,7 +355,7 @@ export default function Landing() {
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-5 text-center">
           <Logo size={32} />
           <p className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-            แกลเลอรีงานแต่งสด + ค้นหารูปด้วยเซลฟี่ — ขับเคลื่อนด้วยใจรัก
+            แกลเลอรีงานแต่งแบบ realtime + ค้นหารูปด้วยเซลฟี่ — ขับเคลื่อนด้วยใจรัก
             <Heart className="size-3.5 fill-patina text-patina" />
           </p>
           <p className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground/70">

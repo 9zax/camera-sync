@@ -358,7 +358,7 @@ export default function GuestEvent() {
                   exit={{ opacity: 0, scale: 0.8 }}
                   className="flex items-center gap-1.5 rounded-full bg-card px-3.5 py-1.5 shadow-sm"
                 >
-                  <span className="size-2 animate-live-dot rounded-full bg-emerald-500" /> อัปเดตสด
+                  <span className="size-2 animate-live-dot rounded-full bg-emerald-500" /> อัปเดต realtime
                 </motion.span>
               )}
             </AnimatePresence>

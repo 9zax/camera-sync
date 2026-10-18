@@ -149,8 +149,9 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
     });
 
     let app = Router::new()
-        .route("/", get(landing))
-        .route("/index.html", get(landing))
+        .route("/", get(spa_landing))
+        .route("/index.html", get(spa_landing))
+        .route("/favicon.svg", get(favicon_entry))
         .route("/download/{file}", get(download_file))
         .route("/r/register", post(register))
         .route("/r/login", post(login))
@@ -1326,6 +1327,44 @@ async fn guest_entry(
 
 /// Fallback: cookie-bound traffic (/api/…, /assets/…, SPA routes) goes back
 /// to the same tunnel.
+/// The public landing is the SPA itself (the wedding-photo grid hero lives
+/// there). Falls back to the static landing.html baked into this binary for
+/// hub builds that were compiled without a web/dist.
+async fn spa_landing(State(state): State<SharedHub>, req: axum::extract::Request) -> Response {
+    let (method, path, headers, bytes) = read_request_parts(req).await;
+    let cookies = crate::util::parse_cookies(&headers);
+    if let Some(id) = cookies.get(TUNNEL_COOKIE).cloned() {
+        return proxy(&state, &id, method, path, headers, bytes).await;
+    }
+    match crate::embedded_web_asset("index.html") {
+        Some(html) => axum::response::Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "text/html; charset=utf-8")
+            .header("cache-control", "no-store")
+            .body(axum::body::Body::from(html.into_owned()))
+            .expect("static response"),
+        None => landing().await,
+    }
+}
+
+/// /favicon.svg — embedded for the public, tunnel for cookie-bound guests.
+async fn favicon_entry(State(state): State<SharedHub>, req: axum::extract::Request) -> Response {
+    let (method, path, headers, bytes) = read_request_parts(req).await;
+    let cookies = crate::util::parse_cookies(&headers);
+    if let Some(id) = cookies.get(TUNNEL_COOKIE).cloned() {
+        return proxy(&state, &id, method, path, headers, bytes).await;
+    }
+    match crate::embedded_web_asset("favicon.svg") {
+        Some(bytes) => axum::response::Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "image/svg+xml")
+            .header("cache-control", "no-store")
+            .body(axum::body::Body::from(bytes.into_owned()))
+            .expect("static response"),
+        None => error_page(StatusCode::NOT_FOUND, "not found"),
+    }
+}
+
 /// /perf — visitors holding a tunnel cookie keep riding their photographer's
 /// tunnel (freshest SPA); everyone else gets the SPA embedded in this hub
 /// binary, so the landing's performance button works for the public.
