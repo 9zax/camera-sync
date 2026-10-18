@@ -27,8 +27,8 @@ const riseIn: Variants = {
 }
 
 
-/** Tilted slow-drifting cover rail built from the event's own photos —
- *  the shared link opens on a living cover, motion.dev gallery style. */
+/** Tilted slow-drifting cover — the event's own photos in three compact
+ *  rows, same grammar as the homepage hero (motion.dev gallery style). */
 function CoverRail({
   photos,
   onOpen,
@@ -37,17 +37,29 @@ function CoverRail({
   onOpen: (index: number) => void
 }) {
   const reduced = useReducedMotion()
-  const W = 168
-  const H = 210
-  const GAP = 18
-  const setWidth = Math.max(photos.length, 1) * (W + GAP)
+  const W = 128
+  const H = 160
+  const GAP = 16
+  const ROWS = 3
+
+  const rows = useMemo(() => {
+    const per = Math.ceil(photos.length / ROWS)
+    const out: PhotoItem[][] = []
+    for (let r = 0; r < ROWS; r++) {
+      out.push(photos.slice(r * per, (r + 1) * per))
+    }
+    return out.filter((r) => r.length > 0)
+  }, [photos])
+
+  const rowLen = rows[0]?.length ?? 1
+  const setWidth = Math.max(rowLen, 1) * (W + GAP)
   const x = useMotionValue(0)
   const dragging = useRef(false)
 
   useAnimationFrame((_, delta) => {
     if (reduced || dragging.current || photos.length < 3) return
     const d = Math.min(delta, 50) / 1000
-    let v = x.get() - 9 * d
+    let v = x.get() - 8 * d
     if (v <= -setWidth) v += setWidth
     if (v > 0) v -= setWidth
     x.set(v)
@@ -57,20 +69,18 @@ function CoverRail({
     if (v <= -setWidth) x.jump(v + setWidth)
     else if (v > 0) x.jump(v - setWidth)
   }
-  // rail shows photos[0..13]; lightbox index matches the full list order
-  const openIndex = (i: number) => onOpen(i)
 
   if (photos.length < 3) return null
   return (
-    <div className="relative overflow-hidden border-b border-[var(--rule)] bg-lacquer-deep/50 py-7">
+    <div className="relative overflow-hidden border-b border-[var(--rule)] bg-lacquer-deep/50 px-4 pb-14 pt-8 [mask-image:linear-gradient(to_bottom,transparent,black_9%,black_82%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,transparent,black_9%,black_82%,transparent)]">
       <div style={{ perspective: 1500 }} className="relative">
         <motion.div
-          style={{ rotateX: reduced ? 0 : 22, rotateZ: reduced ? 0 : -6, scale: 1.05 }}
+          style={{ rotateX: reduced ? 0 : 18, rotateZ: reduced ? 0 : -6, scale: 1.0 }}
           className="origin-center"
         >
           <motion.div
-            className="flex cursor-grab justify-center active:cursor-grabbing"
-            style={{ x: reduced ? 0 : x, gap: GAP }}
+            className="flex cursor-grab flex-col items-center gap-4 active:cursor-grabbing"
+            style={{ x: reduced ? 0 : x }}
             drag={reduced ? false : "x"}
             dragElastic={0.12}
             dragMomentum
@@ -78,22 +88,26 @@ function CoverRail({
             onDragStart={() => (dragging.current = true)}
             onDragEnd={() => setTimeout(() => (dragging.current = false), 2200)}
           >
-            {[0, 1, 2].map((copy) =>
-              photos.map((p, i) => (
-                <CoverCard
-                  key={copy * photos.length + i}
-                  photoId={p.id}
-                  ratio={p.width && p.height ? `${p.width} / ${p.height}` : "4 / 5"}
-                  onOpen={() => openIndex(i)}
-                />
-              )),
-            )}
+            {rows.map((row, r) => (
+              <div key={r} className="flex" style={{ gap: GAP }}>
+                {[...row, ...row, ...row].map((p, c) => {
+                  const canonical = r * rowLen + (c % row.length)
+                  return (
+                    <div key={c} style={{ marginLeft: r % 2 === 1 && c === 0 ? (W + GAP) / 2 : 0 }}>
+                      <CoverCard
+                        photoId={p.id}
+                        ratio={p.width && p.height ? `${p.width} / ${p.height}` : "4 / 5"}
+                        onOpen={() => onOpen(canonical)}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
           </motion.div>
         </motion.div>
       </div>
-      <p className="mt-5 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-        ลากเพื่อเลื่อนดู · คลิกภาพเพื่อดูใหญ่
-      </p>
+      
     </div>
   )
 }
@@ -116,9 +130,9 @@ function CoverCard({
         if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return
         onOpen()
       }}
-      className="relative block shrink-0 cursor-grab overflow-hidden rounded-md bg-card p-1 ring-1 ring-[oklch(78%_0_0/0.16)] outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
-      style={{ width: 168, height: 210, aspectRatio: undefined }}
-      whileHover={{ scale: 1.05 }}
+      className="relative block shrink-0 cursor-grab overflow-hidden rounded-md bg-card p-1 ring-1 ring-[oklch(78% 0 0/0.16)] outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+      style={{ width: 128, height: 160 }}
+      whileHover={{ scale: 1.06 }}
       transition={{ type: "spring", stiffness: 260, damping: 24 }}
     >
       <img
@@ -288,7 +302,7 @@ export default function GuestEvent() {
 
       {/* cover rail — the event's own photos as a tilted, slow-drifting
           catalogue (motion.dev gallery-objects style); click opens lightbox */}
-      <CoverRail photos={photos.slice(0, 14)} onOpen={setLightboxIndex} />
+      <CoverRail photos={photos.slice(0, 24)} onOpen={setLightboxIndex} />
 
       <main className="mx-auto max-w-6xl px-4 pt-8 sm:px-5">
         <Tabs value={tab} onValueChange={setTab}>

@@ -360,6 +360,28 @@ pub async fn set_enabled_route(
     Ok(Json(set_event_enabled(&st, &id, req.enabled).await?))
 }
 
+/// Rename an album (display title only — the slug and guest link stay the
+/// same, so printed QRs never break).
+pub async fn rename_event(st: &SharedState, id: &str, title: &str) -> Result<EventWithCounts, AppError> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err(AppError::bad("กรุณาใส่ชื่ออัลบั้ม"));
+    }
+    if title.chars().count() > 80 {
+        return Err(AppError::bad("ชื่อยาวเกินไป (สูงสุด 80 ตัวอักษร)"));
+    }
+    let res = sqlx::query("UPDATE events SET title=?1 WHERE id=?2")
+        .bind(title)
+        .bind(id)
+        .execute(&st.pool)
+        .await
+        .map_err(AppError::from)?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::not_found("event not found"));
+    }
+    Ok(fetch_with_counts(st, id).await?)
+}
+
 /// Online/offline toggle — offline events answer guests with a friendly
 /// "ปิดใช้งานชั่วคราว" instead of serving photos. Shared by admin route and
 /// the desktop app.

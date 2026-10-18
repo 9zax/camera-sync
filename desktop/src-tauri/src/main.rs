@@ -275,6 +275,15 @@ async fn line_connect(app: AppHandle, state: State<'_, App>, state_key: String) 
 }
 
 #[tauri::command]
+async fn rename_event(id: String, title: String) -> Result<(), String> {
+    let st = server_state_or_err()?;
+    wedsync_server::events::rename_event(&st, &id, &title)
+        .await
+        .map_err(|e| format!("เปลี่ยนชื่อไม่สำเร็จ: {e:?}"))?;
+    Ok(())
+}
+
+#[tauri::command]
 fn line_logout(app: AppHandle, state: State<'_, App>) -> Result<(), String> {
     if let Some(t) = state.tunnel_task.write().unwrap().take() {
         t.abort();
@@ -478,6 +487,7 @@ fn main() {
             open_in_browser,
             delete_event,
             set_event_enabled,
+            rename_event,
             guest_qr,
             save_qr,
         ])

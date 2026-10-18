@@ -276,6 +276,7 @@
               '<div class="top"><b></b><span class="badge"></span></div>' +
               '<div class="url"></div>' +
               '<div class="acts">' +
+              '<button class="secondary" data-a="rename">ตั้งชื่อ</button>' +
               '<button class="secondary" data-a="qr">QR</button>' +
               '<button class="secondary" data-a="copy">คัดลอกลิงก์</button>' +
               '<button class="secondary" data-a="open">เปิด</button>' +
@@ -293,6 +294,17 @@
             };
             paint();
             row.querySelector('[data-a="qr"]').onclick = () => showQr(ev, url);
+            row.querySelector('[data-a="rename"]').onclick = async () => {
+              const name = prompt('ตั้งชื่ออัลบั้มนี้ (ลิงก์/QR เดิมไม่เปลี่ยน):', ev.title || ev.slug);
+              if (name === null) return;
+              try {
+                await invoke("rename_event", { id: ev.id, title: name });
+                toast("เปลี่ยนชื่ออัลบั้มแล้ว ✓");
+                refresh();
+              } catch (e) {
+                toast(String(e));
+              }
+            };
             row.querySelector('[data-a="copy"]').onclick = async () => {
               await navigator.clipboard.writeText(url);
               toast("คัดลอกลิงก์แล้ว ✓");
