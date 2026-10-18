@@ -6,7 +6,7 @@ import {
   useTransform,
   type Variants,
 } from "motion/react"
-import { ChevronLeft, ChevronRight, Download, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Download, Heart, X } from "lucide-react"
 import { photoUrl, type PhotoItem } from "@/lib/api"
 import { formatBytes, formatThaiDateTime } from "@/lib/format"
 
@@ -21,11 +21,15 @@ export function Lightbox({
   index,
   onClose,
   onNavigate,
+  liked,
+  onToggleLike,
 }: {
   photos: PhotoItem[]
   index: number
   onClose: () => void
   onNavigate: (index: number) => void
+  liked?: boolean
+  onToggleLike?: () => void
 }) {
   const photo = photos[index]
   const [direction, setDirection] = useState(0)
@@ -103,6 +107,25 @@ export function Lightbox({
           </motion.div>
         </AnimatePresence>
         <div className="flex items-center gap-1">
+          {onToggleLike && (
+            <motion.button
+              onClick={onToggleLike}
+              className="flex size-10 items-center justify-center rounded-full text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+              title={liked ? "เอาออกจากรายการถูกใจ" : "ถูกใจรูปนี้"}
+              whileHover={{ scale: 1.12 }}
+              whileTap={{ scale: 0.9 }}
+            >
+              <motion.span
+                key={String(liked)}
+                initial={{ scale: liked ? 0.6 : 1 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 500, damping: 15 }}
+                className="flex"
+              >
+                <Heart className={`size-5 ${liked ? "fill-[oklch(84%_0.19_80.46)] text-[oklch(84%_0.19_80.46)]" : ""}`} />
+              </motion.span>
+            </motion.button>
+          )}
           <motion.a
             href={photoUrl(photo.id, "orig")}
             download={photo.filename}

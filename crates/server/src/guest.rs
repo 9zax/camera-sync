@@ -26,7 +26,7 @@ fn face_ready(st: &SharedState) -> bool {
     }
 }
 
-async fn event_or_404(st: &SharedState, slug: &str) -> Result<Event, AppError> {
+pub(crate) async fn event_or_404(st: &SharedState, slug: &str) -> Result<Event, AppError> {
     let ev = events::fetch_event_by_slug(st, slug).await?;
     if ev.enabled == 0 {
         // offline toggle (desktop/admin) — guests get a clear message, not a 404
@@ -37,7 +37,7 @@ async fn event_or_404(st: &SharedState, slug: &str) -> Result<Event, AppError> {
     Ok(ev)
 }
 
-async fn require_pin(st: &SharedState, ev: &Event, headers: &HeaderMap) -> Result<(), AppError> {
+pub(crate) async fn require_pin(st: &SharedState, ev: &Event, headers: &HeaderMap) -> Result<(), AppError> {
     if events::guest_can_access(st, ev, headers).await {
         Ok(())
     } else {

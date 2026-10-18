@@ -12,7 +12,12 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": { target: "http://localhost:8080", changeOrigin: true },
+      // WEDSYNC_DEV_API lets you point the dev server at another hub/serve
+      // instance (e.g. a test build on another port) without editing this file
+      "/api": {
+        target: process.env.WEDSYNC_DEV_API ?? "http://localhost:8080",
+        changeOrigin: true,
+      },
     },
   },
 })

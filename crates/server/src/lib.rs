@@ -10,6 +10,7 @@ pub mod events;
 pub mod faces;
 pub mod guest;
 pub mod importer;
+pub mod likes;
 pub mod models_fetch;
 pub mod photos;
 pub mod pipeline;
@@ -348,7 +349,8 @@ async fn serve_http(state: SharedState, port: u16) -> anyhow::Result<()> {
         .route("/api/g/{slug}/summary", get(guest::summary))
         .route("/api/g/{slug}/photos", get(guest::photos))
         .route("/api/g/{slug}/faces/search", post(guest::face_search))
-        .route("/api/g/{slug}/faces/download", post(guest::face_download_zip));
+        .route("/api/g/{slug}/faces/download", post(guest::face_download_zip))
+        .route("/api/g/{slug}/likes", get(likes::list).post(likes::set));
 
     let routes = routes
         .route("/assets/{*path}", get(serve_asset))

@@ -14,8 +14,24 @@ import { GalleryGrid, GallerySkeleton } from "@/components/GalleryGrid"
 import type { PhotoItem } from "@/lib/api"
 import { Lightbox } from "@/components/Lightbox"
 import { SelfieSearch } from "@/components/SelfieSearch"
-import { api, type EventInfo, type PhotoList } from "@/lib/api"
+import { api, listLikes, setLike, type EventInfo, type PhotoList } from "@/lib/api"
 import { formatEventDate } from "@/lib/format"
+
+/** Stable per-device guest id for likes — randomUUID needs a secure context,
+ * production guests come in over plain http, so fall back to Math.random. */
+function makeGuestId(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID()
+    }
+  } catch {
+    /* insecure context */
+  }
+  return (
+    "g-" +
+    Array.from({ length: 20 }, () => Math.floor(Math.random() * 16).toString(16)).join("")
+  )
+}
 
 const stagger: Variants = {
   hidden: {},
@@ -154,6 +170,21 @@ export default function GuestEvent() {
   const [tab, setTab] = useState("gallery")
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [newPhotos, setNewPhotos] = useState(0)
+  const [likedOnly, setLikedOnly] = useState(false)
+  const [likedIds, setLikedIds] = useState<Set<string>>(() => new Set())
+  const [guestId] = useState(() => {
+    try {
+      const key = `cs-guest-id:${slug}`
+      let id = localStorage.getItem(key)
+      if (!id) {
+        id = makeGuestId()
+        localStorage.setItem(key, id)
+      }
+      return id
+    } catch {
+      return makeGuestId()
+    }
+  })
 
   const infoQuery = useQuery({
     queryKey: ["guest-event", slug],
@@ -175,6 +206,41 @@ export default function GuestEvent() {
   const photos = photosQuery.data?.items ?? []
   const total = photosQuery.data?.total ?? info?.photo_count ?? 0
   const loadingMore = photosQuery.isFetching && !photosQuery.data
+
+  // ---- likes (stored on the photographer's machine, one JSON per event) ----
+  useEffect(() => {
+    if (!info || needsPin) return
+    let cancelled = false
+    listLikes(slug, guestId)
+      .then((r) => {
+        if (!cancelled) setLikedIds(new Set(r.items))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [slug, guestId, needsPin, info])
+
+  const toggleLike = (photoId: string) => {
+    const next = !likedIds.has(photoId)
+    const apply = (on: boolean) =>
+      setLikedIds((prev) => {
+        const s = new Set(prev)
+        if (on) s.add(photoId)
+        else s.delete(photoId)
+        return s
+      })
+    apply(next)
+    setLike(slug, guestId, photoId, next).catch(() => {
+      apply(!next)
+      toast.error("บันทึกหัวใจไม่สำเร็จ — ลองอีกครั้งนะ")
+    })
+  }
+
+  const displayPhotos = useMemo(
+    () => (likedOnly ? photos.filter((p) => likedIds.has(p.id)) : photos),
+    [photos, likedOnly, likedIds],
+  )
 
   // live "new photos" pill when the total grows between polls
   const prevTotal = useRef<number | null>(null)
@@ -329,15 +395,63 @@ export default function GuestEvent() {
           >
             {tab === "gallery" ? (
               <>
-                <div className="mb-8">
-                  <CoverRail photos={photos.slice(0, 24)} onOpen={setLightboxIndex} />
+                <div className="mb-6 flex justify-center">
+                  <motion.button
+                    onClick={() => setLikedOnly((v) => !v)}
+                    whileTap={{ scale: 0.96 }}
+                    className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all ${
+                      likedOnly
+                        ? "border-[var(--rule-strong)] bg-primary/15 text-foreground shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)]"
+                        : "border-border/70 bg-secondary/60 text-muted-foreground hover:text-foreground"
+                    }`}
+                    aria-pressed={likedOnly}
+                  >
+                    <Heart
+                      className={`size-4 ${
+                        likedOnly ? "fill-[oklch(84%_0.19_80.46)] text-[oklch(84%_0.19_80.46)]" : ""
+                      }`}
+                    />
+                    รูปที่ฉันถูกใจ
+                    {likedIds.size > 0 && (
+                      <span className="font-mono text-xs text-muted-foreground">{likedIds.size}</span>
+                    )}
+                  </motion.button>
                 </div>
+                {!likedOnly && (
+                  <div className="mb-8">
+                    <CoverRail photos={photos.slice(0, 24)} onOpen={setLightboxIndex} />
+                  </div>
+                )}
                 {photosQuery.isLoading ? (
                   <GallerySkeleton />
+                ) : likedOnly && displayPhotos.length === 0 ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5 }}
+                    className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-border py-20 text-center"
+                  >
+                    <motion.span
+                      className="mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/10"
+                      animate={{ scale: [1, 1.12, 1] }}
+                      transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      <Heart className="size-7 text-primary" />
+                    </motion.span>
+                    <h3 className="font-display text-xl font-semibold">ยังไม่มีรูปที่ถูกใจ</h3>
+                    <p className="mt-2 max-w-xs text-sm text-muted-foreground">
+                      กดหัวใจไว้ที่รูปที่ชอบตอนดู รูปจะมาอยู่ที่นี่ให้ย้อนกลับมาดูได้ทีหลัง
+                    </p>
+                  </motion.div>
                 ) : photos.length === 0 ? (
                   <EmptyGallery />
                 ) : (
-                  <GalleryGrid photos={photos} onOpen={setLightboxIndex} />
+                  <GalleryGrid
+                    photos={displayPhotos}
+                    onOpen={setLightboxIndex}
+                    likedIds={likedIds}
+                    onToggleLike={toggleLike}
+                  />
                 )}
               </>
             ) : info.face_enabled ? (
@@ -404,10 +518,15 @@ export default function GuestEvent() {
       <AnimatePresence>
         {lightboxIndex !== null && (
           <Lightbox
-            photos={photos}
+            photos={displayPhotos}
             index={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
             onNavigate={setLightboxIndex}
+            liked={displayPhotos[lightboxIndex] ? likedIds.has(displayPhotos[lightboxIndex].id) : false}
+            onToggleLike={() => {
+              const p = displayPhotos[lightboxIndex]
+              if (p) toggleLike(p.id)
+            }}
           />
         )}
       </AnimatePresence>

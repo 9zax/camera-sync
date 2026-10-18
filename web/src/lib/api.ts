@@ -92,6 +92,27 @@ export interface FaceSearchResult {
   message: string
 }
 
+export interface LikeList {
+  items: string[]
+}
+
+export function listLikes(slug: string, guestId: string): Promise<LikeList> {
+  return api.get(`/api/g/${encodeURIComponent(slug)}/likes?guest_id=${encodeURIComponent(guestId)}`)
+}
+
+export function setLike(
+  slug: string,
+  guestId: string,
+  photoId: string,
+  liked: boolean,
+): Promise<{ liked: boolean; photo_likes: number }> {
+  return api.post(`/api/g/${encodeURIComponent(slug)}/likes`, {
+    guest_id: guestId,
+    photo_id: photoId,
+    liked,
+  })
+}
+
 export function photoUrl(id: string, variant: "thumb" | "web" | "orig") {
   return `/api/photos/${id}/file?variant=${variant}`
 }

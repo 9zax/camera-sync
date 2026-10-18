@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { motion, type Variants } from "motion/react"
+import { Heart } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { photoUrl, type PhotoItem } from "@/lib/api"
 
@@ -91,9 +92,13 @@ export function PhotoTile({
 export function GalleryGrid({
   photos,
   onOpen,
+  likedIds,
+  onToggleLike,
 }: {
   photos: PhotoItem[]
   onOpen: (index: number) => void
+  likedIds?: Set<string>
+  onToggleLike?: (photoId: string) => void
 }) {
   return (
     <motion.div
@@ -104,7 +109,31 @@ export function GalleryGrid({
     >
       {photos.map((p, i) => (
         <motion.div key={p.id} variants={tileVariants} layout>
-          <PhotoTile photo={p} onClick={() => onOpen(i)} />
+          <PhotoTile
+            photo={p}
+            onClick={() => onOpen(i)}
+            badge={
+              onToggleLike ? (
+                <span
+                  role="button"
+                  aria-label={likedIds?.has(p.id) ? "เอาออกจากรายการถูกใจ" : "ถูกใจรูปนี้"}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onToggleLike(p.id)
+                  }}
+                  className={`absolute right-2 top-2 z-10 flex size-8 cursor-pointer items-center justify-center rounded-full backdrop-blur-sm transition-colors ${
+                    likedIds?.has(p.id)
+                      ? "bg-black/50 text-[oklch(84%_0.19_80.46)]"
+                      : "bg-black/30 text-white/85 hover:bg-black/50"
+                  }`}
+                >
+                  <Heart
+                    className={`size-4 ${likedIds?.has(p.id) ? "fill-[oklch(84%_0.19_80.46)] text-[oklch(84%_0.19_80.46)]" : ""}`}
+                  />
+                </span>
+              ) : undefined
+            }
+          />
         </motion.div>
       ))}
     </motion.div>
