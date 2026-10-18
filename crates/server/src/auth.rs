@@ -84,7 +84,7 @@ fn set_session_cookie(res: &mut Response, token: &str, ttl_ms: i64) {
     }
 }
 
-fn hash_password(p: &str) -> anyhow::Result<String> {
+pub fn hash_password(p: &str) -> anyhow::Result<String> {
     use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
     let salt = SaltString::generate(&mut OsRng);
     let hash = argon2::Argon2::default()
@@ -93,7 +93,7 @@ fn hash_password(p: &str) -> anyhow::Result<String> {
     Ok(hash.to_string())
 }
 
-fn verify_password(hash: &str, p: &str) -> bool {
+pub fn verify_password(hash: &str, p: &str) -> bool {
     use argon2::password_hash::PasswordVerifier;
     match argon2::password_hash::PasswordHash::new(hash) {
         Ok(parsed) => argon2::Argon2::default()

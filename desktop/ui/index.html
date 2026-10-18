@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CameraSync — เครื่องช่างภาพ</title>
+    <style>
+      :root {
+        --bg: #faf7f2;
+        --card: #ffffff;
+        --ink: #2a2420;
+        --muted: #6b6560;
+        --primary: #8e5a54;
+        --primary-ink: #fdf9f4;
+        --border: #e7dfd5;
+        --ok: #0f9d58;
+        --warn: #b26a00;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: "Anuphan", -apple-system, "Segoe UI", system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        padding: 22px 20px 30px;
+        -webkit-font-smoothing: antialiased;
+      }
+      header { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+      .logo {
+        width: 36px; height: 36px; border-radius: 11px;
+        background: var(--primary); color: var(--primary-ink);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 19px;
+      }
+      header h1 { font-size: 19px; font-weight: 700; }
+      header p { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+
+      .card {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: 16px; padding: 16px; margin-bottom: 14px;
+      }
+      .card h2 { font-size: 14.5px; margin-bottom: 3px; }
+      .card .sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+      .row { display: flex; gap: 8px; margin-bottom: 8px; }
+      .row:last-child { margin-bottom: 0; }
+
+      input[type=text], input[type=password] {
+        flex: 1; width: 100%; border: 1px solid var(--border); border-radius: 10px;
+        padding: 9px 11px; font-size: 13px; font-family: inherit; background: #fffdfb;
+        color: var(--ink); outline: none;
+      }
+      input:focus { border-color: var(--primary); }
+
+      button {
+        border: none; border-radius: 10px; padding: 9px 14px; font-size: 13px;
+        font-family: inherit; font-weight: 600; cursor: pointer; color: var(--primary-ink);
+        background: var(--primary); transition: transform .12s ease, opacity .12s;
+      }
+      button:hover { transform: translateY(-1px); }
+      button:active { transform: scale(.97); }
+      button.secondary { background: #f0e8dd; color: var(--ink); }
+      button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+      button.link { background: none; color: var(--primary); padding: 4px 6px; font-weight: 600; }
+
+      .status { display: flex; align-items: center; gap: 7px; font-size: 12.5px; margin: 10px 0; }
+      .dot { width: 9px; height: 9px; border-radius: 50%; background: #c9c2b8; }
+      .dot.on { background: var(--ok); box-shadow: 0 0 0 3px rgba(15,157,88,.15); }
+      .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(178,106,0,.15); }
+
+      .pill {
+        display: inline-flex; align-items: center; gap: 6px; background: #f4ede3;
+        border-radius: 999px; padding: 5px 11px; font-size: 12px; color: var(--ink);
+      }
+      .url { font-family: ui-monospace, monospace; font-size: 12px; }
+
+      .note {
+        font-size: 11.5px; color: var(--muted); line-height: 1.6;
+        border-top: 1px dashed var(--border); margin-top: 14px; padding-top: 10px;
+      }
+      label.chk { display: flex; gap: 7px; align-items: center; font-size: 12.5px; margin: 4px 0 10px; color: var(--muted); }
+      .err { color: #b3261e; font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
+      .ok-msg { color: var(--ok); font-size: 12px; margin-top: 8px; }
+      .divider { height: 1px; background: var(--border); margin: 12px 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo">◉</div>
+      <div>
+        <h1>CameraSync</h1>
+        <p>เครื่องช่างภาพของคุณ = ที่เก็บรูปทั้งหมด เปิดไว้ตลอดงาน</p>
+      </div>
+    </header>
+
+    <!-- 1) local server -->
+    <div class="card">
+      <h2>1 · เซิร์ฟเวอร์บนเครื่องนี้</h2>
+      <p class="sub">
+        รูปทั้งหมดอยู่บนดิสก์เครื่องนี้ (ไม่มีการอัปโหลดไปเก็บที่อื่น)
+        ชี้โฟลเดอร์รูป เช่น tether folder ของ Lightroom แล้วกดเริ่ม
+      </p>
+      <div class="row">
+        <input type="text" id="importDir" placeholder="โฟลเดอร์รูป (optional — ระบบจะอ่านรูปใหม่ให้อัตโนมัติ)" />
+        <button class="secondary" id="pickBtn">เลือก…</button>
+      </div>
+      <div class="row">
+        <button id="startBtn" style="flex:1">▶ เริ่มเซิร์ฟเวอร์</button>
+        <button class="secondary" id="adminBtn" disabled>เปิดหน้าจัดการ</button>
+      </div>
+      <div class="status"><span class="dot" id="srvDot"></span><span id="srvText">ยังไม่เริ่ม</span></div>
+      <div class="pill" id="srvUrl" style="display:none"></div>
+    </div>
+
+    <!-- 2) hub -->
+    <div class="card">
+      <h2>2 · เชื่อมกับระบบกลาง (hub)</h2>
+      <p class="sub">
+        ใส่ hub ของระบบเรา — hub จะ<b>ดึงภาพจากเครื่องนี้แบบ realtime</b>
+        ไปให้แขกดู แต่<b>ไม่เก็บภาพบน hub เด็ดขาด</b> แขกได้ลิงก์สวย ๆ
+        <span class="url">hub/e/ชื่องาน</span>
+      </p>
+      <div class="row">
+        <input type="text" id="hubUrl" placeholder="wss://hub.example.com:9000" />
+      </div>
+      <div class="row">
+        <input type="text" id="hubUser" placeholder="username" autocomplete="off" />
+      </div>
+      <div class="row">
+        <input type="password" id="hubPass" placeholder="password" />
+      </div>
+      <label class="chk">
+        <input type="checkbox" id="regChk" /> สมัครบัญชีใหม่กับ hub นี้ (ครั้งแรก)
+      </label>
+      <div class="row">
+        <button id="lineBtn" class="secondary" style="flex:1;background:#06c755;color:#fff">💬 เข้าสู่ระบบด้วย LINE</button>
+      </div>
+      <div class="divider" style="text-align:center;font-size:11px;color:var(--muted)">หรือใช้บัญชี hub</div>
+      <div class="row">
+        <button id="hubBtn" style="flex:1">⇄ เชื่อมต่อ hub</button>
+      </div>
+      <div class="status"><span class="dot" id="hubDot"></span><span id="hubText">ยังไม่เชื่อมต่อ</span></div>
+      <div class="err" id="hubErr" style="display:none"></div>
+      <div class="ok-msg" id="hubOk" style="display:none"></div>
+    </div>
+
+    <p class="note">
+      ◉ หลักการ: ดิสก์เครื่องนี้คือที่เก็บหลัก — hub เป็นแค่ทางผ่านของข้อมูล
+      ไม่มีไฟล์ภาพถูกบันทึกบนเซิร์ฟเวอร์ภายนอกแม้แต่ไฟล์เดียว
+      ปิดหน้าต่างนี้เมื่อเชื่อมต่อแล้วก็ได้ ระบบทำงานต่อเบื้องหลัง
+    </p>
+
+    <script>
+      const { invoke } = window.__TAURI__.core;
+      const $ = (id) => document.getElementById(id);
+      let started = false;
+
+      const setState = (dot, text, mode) => {
+        $(dot).className = "dot" + (mode ? " " + mode : "");
+        $(text).textContent =
+          typeof arguments[3] === "string" ? arguments[3] : $(text).textContent;
+      };
+
+      $("pickBtn").onclick = async () => {
+        const dir = await invoke("pick_import_folder");
+        if (dir) $("importDir").value = dir;
+      };
+
+      $("startBtn").onclick = async () => {
+        if (started) return;
+        $("startBtn").disabled = true;
+        $("srvDot").className = "dot warn";
+        $("srvText").textContent = "กำลังเริ่ม…";
+        try {
+          const port = await invoke("start_server", {
+            importDir: $("importDir").value || null,
+          });
+          started = true;
+          $("srvDot").className = "dot on";
+          $("srvText").textContent = "กำลังทำงาน (พอร์ต " + port + ")";
+          $("srvUrl").style.display = "inline-flex";
+          $("srvUrl").innerHTML =
+            '<span class="url">http://localhost:' + port + "</span>";
+          $("adminBtn").disabled = false;
+        } catch (e) {
+          $("srvDot").className = "dot";
+          $("srvText").textContent = "เริ่มไม่สำเร็จ";
+          $("hubErr").style.display = "block";
+          $("hubErr").textContent = String(e);
+          $("startBtn").disabled = false;
+        }
+      };
+
+      $("adminBtn").onclick = async () => {
+        const s = await invoke("get_status");
+        if (s.local_url) await invoke("open_in_browser", { url: s.local_url + "/admin" });
+      };
+
+      const setHubStatus = (text, mode) => {
+        $("hubDot").className = "dot" + (mode ? " " + mode : "");
+        $("hubText").textContent = text;
+      };
+
+      // live status events from the tunnel task
+      if (window.__TAURI__.event) {
+        window.__TAURI__.event.listen("tunnel-status", (ev) => {
+          setHubStatus(ev.payload, ev.payload.includes("เชื่อมต่อแล้ว") ? "on" : "warn");
+        });
+      }
+
+      $("lineBtn").onclick = async () => {
+        const url = $("hubUrl").value.trim();
+        $("hubErr").style.display = "none";
+        $("hubOk").style.display = "none";
+        if (!url) {
+          $("hubErr").style.display = "block";
+          $("hubErr").textContent = "กรอก hub URL ก่อน";
+          return;
+        }
+        if (!started) {
+          $("hubErr").style.display = "block";
+          $("hubErr").textContent = "เริ่มเซิร์ฟเวอร์ (ข้อ 1) ก่อนนะ";
+          return;
+        }
+        setHubStatus("เปิด LINE ให้แล้ว — ยืนยันในเบราว์เซอร์…", "warn");
+        try {
+          const stateKey = await invoke("line_login", { hubUrl: url });
+          setHubStatus("รอยืนยันใน LINE…", "warn");
+          const tid = await invoke("line_connect", { stateKey });
+          $("hubOk").style.display = "block";
+          $("hubOk").textContent = "เชื่อมต่อสำเร็จ (LINE) — tunnel: " + tid;
+          setHubStatus("เชื่อมต่อแล้ว (" + tid + ")", "on");
+        } catch (e) {
+          setHubStatus("เชื่อมต่อไม่สำเร็จ");
+          $("hubErr").style.display = "block";
+          $("hubErr").textContent = String(e);
+        }
+      };
+
+      $("hubBtn").onclick = async () => {
+        const url = $("hubUrl").value.trim();
+        const user = $("hubUser").value.trim();
+        const pass = $("hubPass").value;
+        $("hubErr").style.display = "none";
+        $("hubOk").style.display = "none";
+        if (!url || !user || !pass) {
+          $("hubErr").style.display = "block";
+          $("hubErr").textContent = "กรอก hub URL, username และ password ให้ครบ";
+          return;
+        }
+        if (!started) {
+          $("hubErr").style.display = "block";
+          $("hubErr").textContent = "เริ่มเซิร์ฟเวอร์ (ข้อ 1) ก่อนนะ";
+          return;
+        }
+        setHubStatus("กำลังตรวจสอบ…", "warn");
+        try {
+          if ($("regChk").checked) {
+            await invoke("register_hub", { params: { url, user, pass } });
+          }
+          const tid = await invoke("connect_hub", { params: { url, user, pass } });
+          $("hubOk").style.display = "block";
+          $("hubOk").textContent = "เชื่อมต่อสำเร็จ — tunnel: " + tid + " (แขกเข้าผ่าน hub/e/ชื่องาน)";
+          setHubStatus("เชื่อมต่อแล้ว (" + tid + ")", "on");
+        } catch (e) {
+          setHubStatus("เชื่อมต่อไม่สำเร็จ");
+          $("hubErr").style.display = "block";
+          $("hubErr").textContent = String(e);
+        }
+      };
+    </script>
+  </body>
+</html>

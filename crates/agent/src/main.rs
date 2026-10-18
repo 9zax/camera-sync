@@ -91,17 +91,24 @@ async fn run(cli: Cli) -> Result<()> {
         http: http.clone(),
     };
 
-    // Tunnel mode needs no credentials — it only forwards HTTP to the local server.
+    // Tunnel mode needs no local credentials — it only forwards HTTP to the local server.
     if let Cmd::Tunnel = cli.cmd {
         let relay = cli
             .relay
             .clone()
-            .ok_or_else(|| anyhow!("ต้องระบุ --relay ws://<relay-host>:9000"))?;
-        let id = cli
-            .id
-            .clone()
-            .ok_or_else(|| anyhow!("ต้องระบุ --id <tunnel-id> เช่น --id ploy-n-mek"))?;
-        return run_tunnel(auth, relay, id).await;
+            .ok_or_else(|| anyhow!("ต้องระบุ --relay ws://<hub-host>:9000"))?;
+        if cli.id.is_none() && (cli.user.is_none() || cli.pass.is_none()) {
+            bail!("ต้องระบุ --user/--pass (บัญชี hub) หรือ --id (legacy)");
+        }
+        return wedsync_agent::run_tunnel_forever(wedsync_agent::TunnelConfig {
+            server,
+            relay,
+            id: cli.id.clone(),
+            user: cli.user.clone(),
+            pass: cli.pass.clone(),
+            machine: None,
+        })
+        .await;
     }
 
     // Everything else talks to the server API and needs a token.
@@ -187,132 +194,6 @@ struct Auth {
     server: String,
     token: String,
     http: reqwest::Client,
-}
-
-// ---- reverse tunnel ----
-
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-struct ReqMsg {
-    id: String,
-    method: String,
-    path: String,
-    headers: Vec<(String, String)>,
-    #[serde(default)]
-    body: Option<String>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
-struct RespMsg {
-    id: String,
-    status: u16,
-    headers: Vec<(String, String)>,
-    body: String,
-    #[serde(default)]
-    error: Option<String>,
-}
-
-/// Dial the relay and keep forwarding HTTP requests to the local server.
-/// Reconnects forever (2s backoff) so it can stay running all night.
-async fn run_tunnel(auth: Auth, relay: String, id: String) -> Result<()> {
-    use base64::Engine;
-    use futures_util::{SinkExt, StreamExt};
-    use tokio_tungstenite::tungstenite::Message;
-
-    let mut relay_url = relay.trim().to_string();
-    if relay_url.starts_with("http://") {
-        relay_url = relay_url.replacen("http://", "ws://", 1);
-    } else if relay_url.starts_with("https://") {
-        relay_url = relay_url.replacen("https://", "wss://", 1);
-    }
-    while relay_url.ends_with('/') {
-        relay_url.pop();
-    }
-    let url = format!("{relay_url}/r/connect/{id}");
-    let b64 = base64::engine::general_purpose::STANDARD;
-
-    println!("◉ CameraSync tunnel — {url}");
-    println!("  local server : {}", auth.server);
-    println!("  public URL   : <relay>/t/{id}/");
-    println!("  (reconnects automatically — Ctrl-C to stop)\n");
-
-    loop {
-        match tokio_tungstenite::connect_async(&url).await {
-            Ok((mut ws, _)) => {
-                ws.send(Message::Text(r#"{"register":1}"#.into())).await?;
-                println!("  ⇄ connected to relay as '{id}'");
-                while let Some(msg) = ws.next().await {
-                    let msg = match msg {
-                        Ok(m) => m,
-                        Err(e) => return Err(anyhow!("tunnel stream error: {e}")),
-                    };
-                    match msg {
-                        Message::Text(text) => {
-                            let Ok(req) = serde_json::from_str::<ReqMsg>(&text) else { continue };
-                            let resp = forward_once(&auth, &req).await;
-                            let payload = match resp {
-                                Ok(r) => r,
-                                Err(e) => RespMsg {
-                                    id: req.id,
-                                    status: 502,
-                                    headers: vec![("content-type".into(), "text/plain".into())],
-                                    body: b64.encode(format!("tunnel forward error: {e}")),
-                                    error: Some(e.to_string()),
-                                },
-                            };
-                            let Ok(out) = serde_json::to_string(&payload) else { continue };
-                            if ws.send(Message::Text(out.into())).await.is_err() {
-                                break;
-                            }
-                        }
-                        Message::Ping(p) => {
-                            let _ = ws.send(Message::Pong(p)).await;
-                        }
-                        Message::Close(_) => break,
-                        _ => {}
-                    }
-                }
-                println!("  ↻ relay connection closed — retrying in 2s…");
-            }
-            Err(e) => {
-                println!("  ↻ cannot reach relay ({e}) — retrying in 2s…");
-            }
-        }
-        tokio::time::sleep(Duration::from_secs(2)).await;
-    }
-}
-
-async fn forward_once(auth: &Auth, req: &ReqMsg) -> anyhow::Result<RespMsg> {
-    use base64::Engine;
-    let b64 = base64::engine::general_purpose::STANDARD;
-    let url = format!("{}{}", auth.server.trim_end_matches('/'), req.path);
-    let method = reqwest::Method::from_bytes(req.method.as_bytes())?;
-    let mut builder = auth.http.request(method, &url);
-    for (k, v) in &req.headers {
-        if let (Ok(name), Ok(value)) = (
-            reqwest::header::HeaderName::from_bytes(k.as_bytes()),
-            reqwest::header::HeaderValue::from_str(v),
-        ) {
-            builder = builder.header(name, value);
-        }
-    }
-    if let Some(body) = &req.body {
-        builder = builder.body(b64.decode(body)?);
-    }
-    let resp = builder.timeout(Duration::from_secs(85)).send().await?;
-    let status = resp.status().as_u16();
-    let headers: Vec<(String, String)> = resp
-        .headers()
-        .iter()
-        .filter_map(|(k, v)| v.to_str().ok().map(|v| (k.as_str().to_string(), v.to_string())))
-        .collect();
-    let bytes = resp.bytes().await?;
-    Ok(RespMsg {
-        id: req.id.clone(),
-        status,
-        headers,
-        body: b64.encode(&bytes),
-        error: None,
-    })
 }
 
 async fn print_events(auth: &Auth) -> Result<()> {

@@ -9,6 +9,10 @@ license.workspace = true
 name = "wedsync-server"
 path = "src/main.rs"
 
+[lib]
+name = "wedsync_server"
+path = "src/lib.rs"
+
 [dependencies]
 anyhow.workspace = true
 tokio.workspace = true
@@ -37,6 +41,9 @@ walkdir = "2"
 tokio-tungstenite = "0.23"
 futures-util = "0.3"
 base64 = "0.22"
+
+# LINE Login (hub side token exchange)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # face recognition (InsightFace SCRFD + ArcFace via ONNX)
 ort = { version = "=2.0.0-rc.10", features = ["download-binaries"] }

@@ -107,6 +107,19 @@ pub async fn get_one(
     Ok(Json(fetch_with_counts(&st, &id).await?))
 }
 
+/// Public slug manifest — the hub's tunnel agent announces these so guests
+/// can use pretty /e/{slug} URLs on the hub. Slugs are already semi-public
+/// (they are the guest links).
+pub async fn manifest(State(st): State<SharedState>) -> Json<serde_json::Value> {
+    let slugs: Vec<(String,)> = sqlx::query_as("SELECT slug FROM events ORDER BY created_at DESC")
+        .fetch_all(&st.pool)
+        .await
+        .unwrap_or_default();
+    Json(json!({
+        "slugs": slugs.into_iter().map(|(s,)| s).collect::<Vec<_>>(),
+    }))
+}
+
 #[derive(Deserialize)]
 pub struct CreateReq {
     pub title: String,

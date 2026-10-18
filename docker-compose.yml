@@ -9,10 +9,10 @@
 #   docker compose up -d
 #   เปิด http://localhost:8080/admin แล้วตั้ง user/pass ของตัวเอง
 #
-# tunnel relay (ถ้ามี VPS ตัวหนึ่งให้คนนอกวงเน็ตเข้าถึงเครื่องช่างภาพ):
-#   docker compose --profile relay up -d relay   # รันที่ VPS, expose พอร์ต 9000
-#   แล้วที่เครื่องช่างภาพ: wedsync tunnel --server http://localhost:8080 \
-#        --relay ws://<vps>:9000 --id my-wedding
+# hub บน server จริง (ให้เครื่องช่างภาพเชื่อมเข้ามา — hub ไม่เก็บภาพเด็ดขาด):
+#   docker compose --profile hub up -d hub   # expose พอร์ต 9000
+#   เครื่องช่างภาพ: wedsync tunnel --relay ws://<server>:9000 --user/--pass \
+#        --server http://localhost:8080
 
 services:
   camerasync:
@@ -45,12 +45,15 @@ services:
     volumes:
       - ./data:/app/data
 
-  # tunnel relay — รันบน VPS เพื่อให้เครื่องช่างภาพ (หลัง NAT) โดนเข้าถึงได้
-  relay:
+  # hub — รันบน server จริง: บัญชี + tunnel + ลิงก์แขก /e/{slug}
+  # เก็บเฉพาะบัญชี/ตาราง slug ใน ./hub-data — ไม่มีไฟล์ภาพถูกเขียนเด็ดขาด
+  hub:
     image: camerasync:latest
     build: .
-    profiles: ["relay"]
+    profiles: ["hub"]
     restart: unless-stopped
-    command: ["wedsync-server", "relay", "--port", "9000"]
+    command: ["wedsync-server", "hub", "--port", "9000", "--data-dir", "/app/hub-data"]
     ports:
       - "9000:9000"
+    volumes:
+      - ./hub-data:/app/hub-data

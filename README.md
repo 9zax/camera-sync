@@ -1,11 +1,39 @@
 # CameraSync — Wedding Photo Drive
 
+![Architecture](docs/arch.png)
+
 **Drive รูปงานแต่งหนึ่งงานหนึ่งแหล่ง**: sync จากเครื่องช่างภาพแบบใกล้เรียลไทม์ → แขกสแกน QR ดูรูปสดระหว่างงาน → ถ่ายเซลฟี่เพื่อค้นหารูปของตัวเอง (AI face search)
+
+## Hub กับเครื่องช่างภาพ "คุยกันยังไง"
+
+คำตอบสั้น: **WebSocket ถาวรแบบ dial-out + ส่งต่อเป็น "ซอง HTTP"** (ดูภาพประกอบด้านบน)
+
+1. เครื่องช่างภาพ (desktop app) เป็นฝ่าย **เปิด WebSocket ออกไปหา hub ตลอดเวลา** (`wss://hub/r/connect/u-<user>?token=…`) — อยู่หลัง NAT/ไม่เปิดพอร์ตเข้าเลยก็ใช้ได้ หลุดแล้วต่อใหม่เองทุก 2 วินาที
+2. ทุกครั้งที่ต่อสำเร็จ เครื่องช่างภาพ **announce รายชื่องาน (slug)** ให้ hub (ทุก 60 วิ) → hub เก็บตาราง `slug → tunnel`
+3. เมื่อแขกเปิด `https://hub/e/{slug}/` hub จะแปลง request เป็น JSON+base64 (`method/path/headers/body`) **ยิงผ่าน WebSocket ไปให้เครื่องช่างภาพ** → เครื่องนั้นเรียก server ในตัว (`localhost:8080`) แล้วตอบกลับมา → hub ส่งต่อให้แขก
+4. **ภาพไหลผ่าน RAM ของ hub เท่านั้น** — ไม่มีไฟล์ภาพถูกเขียนลงดิสก์ hub เด็ดขาด (hub ยังไม่สร้าง media directory ด้วยซ้ำ)
+5. ในงานที่มี Wi-Fi แขกสามารถเข้า **LAN ตรง** ที่ IP เครื่องช่างภาพได้เลยโดยไม่ผ่าน hub (เน็ตนอกล่มก็ยังเดิน)
+
+## โมเดลใหม่: Hub-and-Spoke (hub ไม่เก็บภาพเด็ดขาด)
+
+```
+ช่างภาพรัน desktop app (Tauri) ──auth──▶ Hub ของระบบเรา (deploy บน server)
+        │                                     │
+   รูป+DB+face AI อยู่เครื่องช่างภาพ            │ ดึงภาพ realtime ผ่าน tunnel
+   (disk ตัวเอง เปิดไว้ตลอด)                    │ ไม่มีไฟล์ภาพถูกเขียนบน hub เลย
+        ▲                                     ▼
+        └────────── แขกเปิด hub/e/ชื่องาน ◀──────┘
+```
+
+- **เครื่องช่างภาพ**: desktop app embed server ทั้งตัว (SQLite + รูป + โมเดล) + tunnel client
+- **Hub**: เก็บแค่บัญชี + ตาราง slug→tunnel ทุก request ของแขกถูกส่งต่อไปเครื่องช่างภาพแบบ realtime — **zero photo storage by design** (ไม่มีโค้ดสายใดเขียน bytes ภาพลงดิสก์ แม้ media directory ยังไม่ถูกสร้าง)
+- แขกได้ลิงก์สวย `https://hub/e/{event-slug}/` ไม่เห็นความซับซ้อนใด ๆ
+- เครื่องช่างภาพออฟไลน์? hub แสดงหน้า "เครื่องช่างภาพออฟไลน์" และเชื่อมใหม่อัตโนมัติเมื่อกลับมา
 
 ## หลักการออกแบบ (ข้อด้อยของทุกระบบ คือจุดแข็งของเรา)
 
 1. **ดิสก์เครื่องช่างภาพคือที่เก็บหลัก** — รูป ฐานข้อมูล และโมเดลอยู่บนเครื่อง/สตูดิโอของคุณเอง ไม่หมดอายุ ไม่ถูกย่อความละเอียด ไม่ต้องเช่าพื้นที่คลาวด์รายเดือน (ต่างจาก Memzo 3¢/รูป + resize เหลือ 4K, Wedibox/GuestPix ฟรี 50 รูป + หมดอายุ 12 เดือน — หลักฐานจาก reverse engineering จริง: [docs/COMPETITIVE-EDGE.md](docs/COMPETITIVE-EDGE.md))
-2. **เปิดไว้ตลอด (always-on)** — รันแบบ desktop app / Docker / systemd เปิดทิ้งไว้ทั้งงาน relay ต่อใหม่อัตโนมัติ
+2. **เปิดไว้ตลอด (always-on)** — desktop app / Docker / systemd เปิดทิ้งไว้ทั้งงาน tunnel ต่อใหม่อัตโนมัติ
 3. **ครั้งแรกที่รัน = ผู้ใช้ตั้ง user/pass ของตัวเอง** ผ่านหน้าเว็บ (ไม่มีบัญชี default)
 4. **แขกไม่ต้องติดแอป ไม่ต้องสมัคร ไม่มี OTP** — สแกน QR แล้วดูเลย ทำงานบน LAN ของงานได้แม้ไม่มีอินเทอร์เน็ต
 
@@ -36,28 +64,59 @@
 
 ## เริ่มต้นใช้งาน
 
-### ทางเลือก A — Docker Compose (แนะนำสำหรับ "เปิดไว้ตลอด")
+### ผู้ให้บริการ (เรา) — deploy hub ครั้งเดียวบน server จริง
+
+ตัวอย่าง server จริง: `43.228.126.41`
 
 ```bash
-docker compose build
-docker compose run --rm models   # โหลดโมเดล face search ครั้งเดียว (~280MB)
-docker compose up -d             # restart: unless-stopped = เปิดตลอด
-# เปิด http://localhost:8080/admin → ตั้ง user/pass ของตัวเอง → สร้างงานแรก
+# บน server (มี docker):
+git clone https://github.com/9zax/camera-sync && cd camera-sync
+docker compose --profile hub up -d hub      # hub ที่พอร์ต 9000
+
+# แนะนำ: ปิด HTTPS ด้วย Caddy (wss สำหรับ tunnel + https สำหรับแขก)
+#   caddyfile:  sync.example.com { reverse_proxy localhost:9000 }
 ```
 
-### ทางเลือก B — รันบนเครื่องตรง ๆ (desktop/สตูดิโอ)
+**เปิด LINE Login** (ให้ช่างภาพล็อกอินด้วย LINE ผ่านปุ่มใน desktop app):
+1. สร้าง channel แบบ "LINE Login" ที่ [developers.line.biz](https://developers.line.biz) (ประเภท web app)
+2. ตั้ง Callback URL เป็น `https://<โดเมน>/r/line/callback`
+3. ใส่ค่า env ให้ hub:
+```yaml
+environment:
+  LINE_CHANNEL_ID: "16xxxxxxxx"
+  LINE_CHANNEL_SECRET: "xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  HUB_PUBLIC_URL: "https://sync.example.com"   # ใช้ตอนสร้างลิงก์ redirect
+```
+
+flow: แอป desktop กด "เข้าสู่ระบบด้วย LINE" → เปิดเบราว์เซอร์ไป hub → ผู้ใช้ยืนยันใน LINE → hub ได้ LINE userId → ออก machine token ให้แอปอัตโนมัติ → tunnel ต่อทันที (ไม่ต้องจำ user/pass เลย) ถ้ายังไม่ตั้ง LINE env ระบบพร้อมใช้ด้วย user/password ได้เหมือนเดิม
+
+hub เก็บแค่บัญชี + ตาราง slug→tunnel ใน SQLite เล็ก ๆ — ไม่มี media directory ถูกสร้าง ไม่มีไฟล์ภาพถูกเขียนเด็ดขาด
+
+### ช่างภาพ — Desktop app (Tauri)
+
+```bash
+cd desktop && npm install && npx tauri build
+# ได้ .app/.dmg ที่ target/release/bundle/ — ส่งให้ช่างภาพติดตั้ง
+```
+
+flow ในแอป (3 คลิก):
+1. เลือกโฟลเดอร์รูปในเครื่อง (หรือ tether folder) → **เริ่มเซิร์ฟเวอร์** (รูป+DB+face AI อยู่เครื่องนี้ทั้งหมด)
+2. ใส่ hub URL + สมัคร/ล็อกอิน → **เชื่อมต่อ hub**
+3. แขกได้ลิงก์ `https://hub/e/{ชื่องาน}/` — hub ดึงภาพจากเครื่องนี้ realtime ตลอดงาน
+
+### ทางเลือก B — รันบนเครื่องตรง ๆ ด้วย CLI
 
 ```bash
 cargo build --release
 cd web && npm install && npm run build && cd ..
 ./target/release/wedsync-server fetch-models            # ครั้งเดียว (ข้ามได้)
 ./target/release/wedsync-server serve --port 8080 \
-     --import-dir ~/Pictures/WeddingInbox               # server อ่านโฟลเดอร์เครื่องเอง!
+     --import-dir ~/Pictures/WeddingInbox               # อ่านโฟลเดอร์เครื่องเอง
+./target/release/wedsync tunnel --relay ws://<hub>:9000 --user <user> --pass <pass> \
+     --server http://localhost:8080                      # เชื่อม hub (announce งานอัตโนมัติ)
 ```
 
-`--import-dir` = ชี้ tether folder ของ Lightroom/Capture One ได้เลย รูปใหม่ทุกใบถูก ingest อัตโนมัติ (ไม่ต้องอัปโหลด — ไฟล์อยู่บนดิสก์เดียวกันแล้ว) ไม่ระบุ `--event` จะสร้างงานใหม่ชื่อตามโฟลเดอร์ให้อัตโนมัติ
-
-**macOS desktop app:** `./scripts/make-mac-app.sh` สร้าง `CameraSync.app` ไว้ ~/Applications — double-click = เปิด server + import folder + เปิดหน้า admin (เพิ่มใน Login Items เพื่อเปิดอัตโนมัติทุกเช้า) · Linux: [scripts/camerasync.service](scripts/camerasync.service) (systemd)
+**macOS เวอร์ชันเบา (ไม่ต้องติดตั้ง):** `./scripts/make-mac-app.sh` สร้าง `CameraSync.app` รัน server+import folder · Linux: [scripts/camerasync.service](scripts/camerasync.service) · Docker: `docker compose up -d` (photo-drive แบบเต็มในคอนเทนเนอร์)
 
 ### Sync จากอีกเครื่อง (ถ้ารูปอยู่คนละเครื่องกับ server)
 
@@ -65,22 +124,13 @@ cd web && npm install && npm run build && cd ..
 ./target/release/wedsync --server http://<server>:8080 --event <id> --token <upload-token> watch /path/to/folder
 ```
 
-## ให้คนนอกเข้าถึงโดย "ไม่เช่าดิสก์": Tunnel ในตัว หรือ VPN
+## การเข้าถึงจากภายนอก (ไม่เช่า disk เพิ่ม)
 
-รูปยังอยู่เครื่องคุณทั้งหมด มีแค่ HTTP วิ่งออกไป:
-
-```bash
-# ที่ VPS ตัวเล็ก (มีแค่ relay ไม่มีรูป):
-docker compose --profile relay up -d relay        # หรือ: wedsync-server relay --port 9000
-
-# ที่เครื่องช่างภาพ (หลัง NAT ก็ได้ — dial-out อย่างเดียว ต่อใหม่อัตโนมัติ):
-./target/release/wedsync tunnel --server http://localhost:8080 \
-     --relay ws://<vps>:9000 --id ploy-n-mek
-
-# แขกเข้า: https://<vps>:9000/t/ploy-n-mek/  (QR ที่หน้า admin จะใส่ prefix ให้เอง)
-```
-
-ทางเลือก: ใช้ VPN ส่วนตัว (Tailscale/ZeroTier) — ติดตั้งทั้งเครื่องช่างภาพกับแขกไม่ได้ใช่ไหม? งั้นใช้กับทีมงาน/admin ได้ ส่วนแขกทั่วไปแนะนำ tunnel ข้างบน
+| วิธี | เหมาะกับ | หมายเหตุ |
+|---|---|---|
+| **Hub + tunnel** (แนะนำ) | แขกทั่วไปผ่านอินเทอร์เน็ต | hub ของเรา → เครื่องช่างภาพ realtime, ลิงก์สวย `/e/{slug}`, ไม่เก็บภาพบน hub |
+| LAN ตรง | ในงานที่มี Wi-Fi | แขกยิง IP เครื่องช่างภาพได้เลยแม้เน็ตนอกล่ม |
+| VPN (Tailscale/ZeroTier) | ทีมงาน/admin | รายละเอียดใน docs/COMPETITIVE-EDGE.md |
 
 ## การใช้งานหน้าเว็บ
 

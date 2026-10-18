@@ -10,10 +10,14 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(data_dir: PathBuf) -> anyhow::Result<Self> {
+    /// `media = true` creates the photo directories (photo-drive server).
+    /// The hub passes `false` — it must never have media storage.
+    pub fn load(data_dir: PathBuf, media: bool) -> anyhow::Result<Self> {
         std::fs::create_dir_all(&data_dir)?;
-        for sub in ["originals", "thumbs", "web", "models"] {
-            std::fs::create_dir_all(data_dir.join(sub))?;
+        if media {
+            for sub in ["originals", "thumbs", "web", "models"] {
+                std::fs::create_dir_all(data_dir.join(sub))?;
+            }
         }
         let secret_path = data_dir.join("secret.key");
         let secret = match std::fs::read_to_string(&secret_path) {
