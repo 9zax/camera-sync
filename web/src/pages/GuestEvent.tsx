@@ -72,11 +72,11 @@ function CoverRail({
 
   if (photos.length < 3) return null
   return (
-    <div className="relative overflow-hidden border-b border-[var(--rule)] bg-lacquer-deep/50 px-4 pb-14 pt-8 [mask-image:linear-gradient(to_bottom,transparent,black_9%,black_82%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,transparent,black_9%,black_82%,transparent)]">
+    <div className="relative overflow-hidden border-b border-[var(--rule)] bg-lacquer-deep/50 px-4 pb-16 pt-4 [mask-image:linear-gradient(to_bottom,black_92%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,black_92%,transparent)]">
       <div style={{ perspective: 1500 }} className="relative">
         <motion.div
-          style={{ rotateX: reduced ? 0 : 18, rotateZ: reduced ? 0 : -6, scale: 1.0 }}
-          className="origin-center"
+          style={{ rotateX: reduced ? 0 : 14, rotateZ: reduced ? 0 : -5, transformOrigin: "top center" }}
+          className="origin-top"
         >
           <motion.div
             className="flex cursor-grab flex-col items-center gap-4 active:cursor-grabbing"
@@ -307,11 +307,12 @@ export default function GuestEvent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25, duration: 0.4 }}
           >
-            <TabsList className="mx-auto mb-8 grid w-full max-w-md grid-cols-2 rounded-full border border-border/70 bg-secondary/60 p-1 shadow-sm">
-              <TabsTrigger value="gallery" className="rounded-full py-2.5 font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]">
+            {/* base TabsList forces h-9 via this group variant; override with the same variant so pills (h-10) fit the track */}
+            <TabsList className="mx-auto mb-8 grid w-full max-w-md grid-cols-2 rounded-full border border-border/70 bg-secondary/60 p-1 shadow-sm group-data-[orientation=horizontal]/tabs:h-auto">
+              <TabsTrigger value="gallery" className="h-10 rounded-full font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]">
                 <Images className="mr-2 size-4" /> แกลเลอรี
               </TabsTrigger>
-              <TabsTrigger value="me" className="rounded-full py-2.5 font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]" disabled={!info.face_enabled}>
+              <TabsTrigger value="me" className="h-10 rounded-full font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]" disabled={!info.face_enabled}>
                 <ScanFace className="mr-2 size-4" /> หารูปตัวเอง
               </TabsTrigger>
             </TabsList>
