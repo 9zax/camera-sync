@@ -4,7 +4,7 @@
 //! - ช่างภาพรัน desktop app (server + disk อยู่เครื่องเขา) แล้ว auth เข้า hub
 //! - Hub เก็บแค่บัญชี + ตาราง slug→tunnel — **ไม่มีการเก็บไฟล์ภาพบน hub เด็ดขาด**
 //!   (ไม่มีโค้ดสายใดเขียน bytes ลงดิสก์ มีแค่ HTTP ผ่านหน่วยความจำชั่วคราว)
-//! - แขกเปิด https://hub/e/{slug}/ → hub หา tunnel ของเครื่องช่างภาพที่มีงานนั้น
+//! - ลูกค้าเปิด https://hub/e/{slug}/ → hub หา tunnel ของเครื่องช่างภาพที่มีงานนั้น
 //!   แล้ว proxy ทุกอย่าง (รวม face search) ไปยังเครื่องนั้นแบบ realtime
 //! - รองรับ legacy: /t/{id}/… (ไม่ต้องมีบัญชี) และ LAN ตรง (ไม่ผ่าน hub เลย)
 
@@ -87,9 +87,56 @@ const HOP_HEADERS: &[&str] = &[
 
 /// Run the hub. `data_dir` holds only accounts/registry — media directories
 /// are deliberately NOT created and no image bytes are ever written.
+/// Upsert the system admin from HUB_ADMIN_USER / HUB_ADMIN_PASS so the
+/// operator can watch every photographer's account from /r/admin.
+async fn ensure_system_admin(db: &sqlx::SqlitePool) {
+    let (Some(user), Some(pass)) = (
+        std::env::var("HUB_ADMIN_USER").ok().filter(|v| !v.trim().is_empty()),
+        std::env::var("HUB_ADMIN_PASS").ok().filter(|v| !v.trim().is_empty()),
+    ) else {
+        return;
+    };
+    let hash = match crate::auth::hash_password(pass.trim()) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("admin bootstrap: hash failed: {e}");
+            return;
+        }
+    };
+    let existing: Option<(String,)> =
+        sqlx::query_as("SELECT id FROM users WHERE username=?1")
+            .bind(&user)
+            .fetch_optional(db)
+            .await
+            .ok()
+            .flatten();
+    match existing {
+        Some((id,)) => {
+            let _ = sqlx::query("UPDATE users SET password_hash=?1, is_admin=1 WHERE id=?2")
+                .bind(&hash)
+                .bind(&id)
+                .execute(db)
+                .await;
+        }
+        None => {
+            let _ = sqlx::query(
+                "INSERT INTO users(id, username, password_hash, is_admin, created_at) VALUES (?1,?2,?3,1,?4)",
+            )
+            .bind(crate::util::new_id())
+            .bind(user.trim())
+            .bind(&hash)
+            .bind(crate::util::now_ms())
+            .execute(db)
+            .await;
+        }
+    }
+    println!("◉ system admin ready (HUB_ADMIN_USER)");
+}
+
 pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
     let cfg = crate::config::Config::load(data_dir.clone(), false)?;
     let db = crate::db::init_pool(&cfg).await?;
+    ensure_system_admin(&db).await;
     let downloads_dir = data_dir.join("downloads");
     tokio::fs::create_dir_all(&downloads_dir).await.ok();
     let state: SharedHub = Arc::new(HubState {
@@ -113,6 +160,9 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
         .route("/r/line/poll", get(line_poll))
         .route("/r/line/start", get(line_web_start))
         .route("/r/line/me", get(line_me_page))
+        .route("/r/admin", get(admin_page))
+        .route("/r/admin/login", post(admin_login))
+        .route("/r/admin/logout", post(admin_logout))
         .route("/r/line/slugs", get(line_my_slugs))
         .route("/r/qr/{slug}", get(line_qr_png))
         .route("/r/connect/{id}", get(ws_connect))
@@ -163,6 +213,15 @@ async fn download_file(
         .collect();
     if safe.is_empty() || safe.starts_with('.') || safe.contains("..") {
         return crate::error::AppError::bad("ชื่อไฟล์ไม่ถูกต้อง").into_response();
+    }
+    // official releases live on GitHub — redirect when configured, so the
+    // hub never carries installer bandwidth itself
+    if safe.eq_ignore_ascii_case("CameraSync.dmg") {
+        if let Ok(url) = std::env::var("CAMERASYNC_DMG_URL") {
+            if url.starts_with("https://") {
+                return axum::response::Redirect::temporary(&url).into_response();
+            }
+        }
     }
     let path = st
         .downloads_dir
@@ -359,6 +418,242 @@ struct SlugPath {
 }
 
 /// QR PNG of the public guest link — no auth (the slug is the guest secret).
+
+// ---------- system admin: watch every photographer ----------
+
+async fn is_admin_session(st: &SharedHub, headers: &HeaderMap) -> Option<String> {
+    let username = web_session_user(st, headers).await?;
+    let admin: Option<(i64,)> = sqlx::query_as(
+        "SELECT is_admin FROM users WHERE username=?1",
+    )
+    .bind(&username)
+    .fetch_optional(&st.db)
+    .await
+    .ok()
+    .flatten();
+    admin.filter(|(a,)| *a == 1).map(|_| username)
+}
+
+#[derive(Deserialize)]
+struct AdminLoginReq {
+    username: String,
+    password: String,
+}
+
+async fn admin_login(State(st): State<SharedHub>, Json(req): Json<AdminLoginReq>) -> Response {
+    let row: Option<(String, String, i64)> = sqlx::query_as(
+        "SELECT id, password_hash, is_admin FROM users WHERE username=?1",
+    )
+    .bind(req.username.trim())
+    .fetch_optional(&st.db)
+    .await
+    .ok()
+    .flatten();
+    let Some((user_id, hash, is_admin)) = row else {
+        return crate::error::AppError::Unauthorized("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง".into()).into_response();
+    };
+    if is_admin != 1 || !crate::auth::verify_password(&hash, &req.password) {
+        return crate::error::AppError::Unauthorized("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง".into()).into_response();
+    }
+    let token = crate::util::random_token();
+    let _ = sqlx::query("INSERT INTO sessions(token, user_id, kind, expires_at) VALUES (?1,?2,'web',?3)")
+        .bind(&token)
+        .bind(&user_id)
+        .bind(crate::util::now_ms() + 12 * 3600 * 1000)
+        .execute(&st.db)
+        .await;
+    let mut res = axum::response::Redirect::to("/r/admin").into_response();
+    if let Ok(v) = axum::http::HeaderValue::from_str(&format!(
+        "cs_hub={token}; Path=/; SameSite=Lax; Max-Age={}",
+        12 * 3600
+    )) {
+        res.headers_mut().append(axum::http::header::SET_COOKIE, v);
+    }
+    res
+}
+
+async fn admin_logout() -> Response {
+    let mut res = axum::response::Redirect::to("/r/admin").into_response();
+    if let Ok(v) = axum::http::HeaderValue::from_str("cs_hub=; Path=/; SameSite=Lax; Max-Age=0") {
+        res.headers_mut().append(axum::http::header::SET_COOKIE, v);
+    }
+    res
+}
+
+fn admin_shell(body: &str, refresh: bool) -> String {
+    format!(
+        r##"<!doctype html><html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>แอดมินระบบ — CameraSync</title>
+<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600&family=Kanit:wght@200;300;400;500&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:Anuphan,"Noto Sans Thai",system-ui,sans-serif;background:oklch(7% .006 95);color:oklch(88% 0 0);line-height:1.7}}
+.wrap{{max-width:1000px;margin:0 auto;padding:0 20px}}
+header{{display:flex;align-items:center;justify-content:space-between;padding:18px 0;border-bottom:1px solid oklch(78% 0 0/.16)}}
+.brand h1{{font-family:Kanit,sans-serif;font-size:17px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:oklch(91% 0 0)}}
+.kicker{{display:inline-flex;align-items:center;gap:10px;font-family:"Roboto Mono",monospace;font-size:.68rem;font-weight:500;letter-spacing:.24em;text-transform:uppercase;color:oklch(84% .19 80.46)}}
+.kicker::before,.kicker::after{{content:"";width:30px;height:1px;background:oklch(74% .09 82/.6)}}
+h2.title{{font-family:Kanit,"Noto Sans Thai",sans-serif;font-size:clamp(24px,4vw,34px);font-weight:300;margin:18px 0 6px;color:oklch(91% 0 0)}}
+h2.title b{{font-weight:400;color:oklch(84% .19 80.46)}}
+table{{width:100%;border-collapse:collapse;margin-top:22px;font-size:13px}}
+th{{font-family:"Roboto Mono",monospace;font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:oklch(62% 0 0);text-align:left;padding:10px 10px;border-bottom:1px solid oklch(78% 0 0/.22)}}
+td{{padding:12px 10px;border-bottom:1px solid oklch(78% 0 0/.1);vertical-align:top}}
+.on{{color:oklch(70% .12 188);font-weight:600}}
+.off{{color:oklch(62% 0 0)}}
+.slug{{font-family:ui-monospace,monospace;font-size:11px;color:oklch(72% 0 0);word-break:break-all}}
+.hint{{font-size:11.5px;color:oklch(62% 0 0);margin-top:16px}}
+.login{{max-width:360px;margin:80px auto 0;background:oklch(11% .006 95);border:1px solid oklch(78% 0 0/.16);border-radius:8px;padding:30px}}
+.login h2{{font-family:Kanit,sans-serif;font-weight:300;font-size:22px;color:oklch(91% 0 0);margin-bottom:6px}}
+.login p{{font-size:12.5px;color:oklch(72% 0 0)}}
+input{{width:100%;background:oklch(4% .004 95);border:1px solid oklch(78% 0 0/.22);color:oklch(88% 0 0);border-radius:4px;padding:12px 14px;font-family:inherit;font-size:14px;margin-top:12px}}
+button{{margin-top:16px;width:100%;border:none;border-radius:4px;padding:12px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;background:oklch(84% .19 80.46);color:oklch(4% .004 95)}}
+.err{{color:#e08573;font-size:12.5px;margin-top:10px}}
+.top-logout{{background:transparent;color:oklch(72% 0 0);border:1px solid oklch(78% 0 0/.22);width:auto;padding:8px 14px;font-weight:500;font-size:12.5px;margin:0}}
+footer{{border-top:1px solid oklch(78% 0 0/.16);margin-top:34px;padding:18px 0 30px;text-align:center;font-size:12px;color:oklch(62% 0 0)}}
+</style></head><body><div class="wrap">
+<header>
+  <div class="brand"><h1>CameraSync · แอดมินระบบ</h1></div>
+  <form method="post" action="/r/admin/logout" style="margin:0"><button class="top-logout" type="submit">ออกจากระบบ</button></form>
+</header>
+{body}
+<footer>แต่ละช่างภาพใช้บัญชี LINE ของตัวเอง — งานและรูปอยู่บนเครื่องของแต่ละคน แยกจากกันโดยสิ้นเชิง · ภาพไม่ถูกเก็บบนเซิร์ฟเวอร์</footer>
+</div>{refresh_script}</body></html>"##,
+        body = body,
+        refresh_script = if refresh { "<script>setTimeout(()=>location.reload(),15000)</script>" } else { "" },
+    )
+}
+
+async fn admin_page(State(st): State<SharedHub>, headers: HeaderMap) -> Response {
+    if is_admin_session(&st, &headers).await.is_none() {
+        let html = admin_shell(
+            r#"<div class="login">
+  <h2>เข้าสู่ระบบแอดมิน</h2>
+  <p>สำหรับผู้ดูแลระบบ — ดูสถานะช่างภาพทุกคนได้จากที่นี่</p>
+  <form method="post" action="javascript:void(0)" id="f">
+    <input id="u" placeholder="ชื่อผู้ใช้" autocomplete="username" />
+    <input id="p" type="password" placeholder="รหัสผ่าน" autocomplete="current-password" />
+    <button type="submit">เข้าสู่ระบบ</button>
+    <p class="err" id="e" style="display:none"></p>
+  </form>
+  <script>
+    f.onsubmit = async (ev) => {{
+      ev.preventDefault();
+      e.style.display = "none";
+      const r = await fetch("/r/admin/login", {{
+        method: "POST",
+        headers: {{"content-type": "application/json"}},
+        body: JSON.stringify({{username: u.value, password: p.value}}),
+      }});
+      if (r.ok) location.reload();
+      else {{ e.textContent = (await r.json()).error || "เข้าสู่ระบบไม่สำเร็จ"; e.style.display = "block"; }}
+    }};
+  </script>
+</div>"#,
+            false,
+        );
+        return (
+            [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+            html,
+        )
+            .into_response();
+    }
+
+    // every account + live status + their announced events
+    let users: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT username, created_at FROM users ORDER BY created_at DESC",
+    )
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default();
+    let tunnels = st.tunnels.lock().await;
+    let slug_map = st.slug_map.lock().await;
+
+    let mut rows = String::new();
+    let mut online = 0usize;
+    let mut total_events = 0usize;
+    for (username, created) in &users {
+        let display = username.strip_prefix("line:").map(|_| "LINE ช่างภาพ").unwrap_or("บัญชี");
+        let tid = tunnel_id_for(username);
+        let is_online = tunnels.contains_key(&tid);
+        if is_online {
+            online += 1;
+        }
+        let slugs: Vec<&String> = slug_map
+            .iter()
+            .filter(|(_, t)| *t == &tid)
+            .map(|(s, _)| s)
+            .collect();
+        total_events += slugs.len();
+        let slugs_html = if slugs.is_empty() {
+            "<span class=\"slug\" style=\"opacity:.5\">— ยังไม่มีงานบนเว็บ —</span>".to_string()
+        } else {
+            slugs
+                .iter()
+                .map(|s| format!("<a class=\"slug\" style=\"color:oklch(70% .12 188)\" href=\"/e/{}/\" target=\"_blank\">{}/</a>", s, s))
+                .collect::<Vec<_>>()
+                .join(" · ")
+        };
+        let name = if let Some(rest) = username.strip_prefix("line:") {
+            format!("ช่างภาพ LINE ····{}", &rest[rest.len().saturating_sub(6)..])
+        } else {
+            username.clone()
+        };
+        let created_str = chrono_trim(*created);
+        rows.push_str(&format!(
+            "<tr><td><b>{name}</b><br><span style=\"font-size:11px;color:oklch(62% 0 0)\">{display} · สมัคร {created_str}</span></td><td class=\"{}\">{}</td><td>{}</td></tr>",
+            if is_online { "on" } else { "off" },
+            if is_online { "● ออนไลน์" } else { "ออฟไลน์" },
+            slugs_html,
+        ));
+    }
+    drop(tunnels);
+    drop(slug_map);
+
+    let body = format!(
+        r#"<span class="kicker">System Admin</span>
+<h2 class="title">ช่างภาพทุกคน <b>ในหน้าเดียว</b></h2>
+<p style="color:oklch(72% 0 0);font-size:13.5px">ออนไลน์ {online} บัญชี · งานบนเว็บทั้งหมด {total_events} งาน · อัปเดตอัตโนมัติทุก 15 วินาที</p>
+<table><thead><tr><th>ช่างภาพ</th><th>สถานะเครื่อง</th><th>งาน (ลิงก์ลูกค้า)</th></tr></thead><tbody>{rows}</tbody></table>
+<p class="hint">ถ้าสถานะเป็น "ออฟไลน์" ระหว่างงาน = แอปบนเครื่องช่างภาพหลุดการเชื่อมต่อ ควรแจ้งให้เปิดแอปใหม่</p>"#
+    );
+    let html = admin_shell(&body, true);
+    (
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        html,
+    )
+        .into_response()
+}
+
+fn chrono_trim(ms: i64) -> String {
+    // simple local-date render without pulling chrono into scope names
+    let secs = ms / 1000;
+    let days = secs / 86400;
+    // 2026-01-01 epoch-days ≈ 20454 (days since 1970-01-01)
+    let mut y = 1970i64;
+    let mut d = days;
+    loop {
+        let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+        let len = if leap { 366 } else { 365 };
+        if d < len {
+            break;
+        }
+        d -= len;
+        y += 1;
+    }
+    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    let ml = [31, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut m = 1;
+    for l in ml {
+        if d < l {
+            break;
+        }
+        d -= l;
+        m += 1;
+    }
+    format!("{y}-{m:02}-{:02}", d + 1)
+}
+
 async fn line_qr_png(Path(p): Path<SlugPath>) -> Response {
     let url = format!("/e/{}/", p.slug);
     let Ok(code) = qrcode::QrCode::with_error_correction_level(
@@ -417,10 +712,10 @@ async fn line_me_page(State(st): State<SharedHub>, headers: HeaderMap) -> Respon
         <p class="url">{url}</p>
         <div class="row">
           <a class="btn" href="/r/qr/{slug}" download="CameraSync-{slug}-qr.png">ดาวน์โหลด QR</a>
-          <a class="btn ghost" href="/e/{slug}/" target="_blank" rel="noopener">เปิดหน้าแขก</a>
+          <a class="btn ghost" href="/e/{slug}/" target="_blank" rel="noopener">เปิดหน้าลูกค้า</a>
           <button class="btn ghost" onclick="navigator.clipboard.writeText('{url}').then(()=>this.textContent='คัดลอกแล้ว ✓')">คัดลอกลิงก์</button>
         </div>
-        <p class="hint">ปริ้น QR นี้แปะโต๊ะแขก หรือส่งลิงก์ให้ทีมงาน — แขกสแกนแล้วดูรูปได้เลย</p>
+        <p class="hint">ปริ้น QR นี้แปะโต๊ะให้ลูกค้าสแกน หรือส่งลิงก์ให้ทีมงาน — ลูกค้าสแกนแล้วดูรูปได้เลย</p>
       </div>
     </div>"#
         ));
@@ -483,11 +778,28 @@ footer{{border-top:1px solid oklch(78% 0 0/.16);margin-top:34px;padding:18px 0 3
 footer a{{color:oklch(72% 0 0)}}
 </style></head><body><div class="wrap">
 <header>
-  <a class="brand" href="/"><svg width="38" height="38" viewBox="0 0 512 512" style="display:block"><rect width="512" height="512" rx="118" fill="#E2B15C"/><circle cx="256" cy="252" r="122" fill="none" stroke="#241E1A" stroke-width="24"/><circle cx="352" cy="180" r="26" fill="#5FBDBD"/><path fill="#241E1A" d="M256 316 C 212 283 186 258 186 228 C 186 206 203 190 224 190 C 238 190 249 197 256 209 C 263 197 274 190 288 190 C 309 190 326 206 326 228 C 326 258 300 283 256 316 Z"/></svg>
+  <a class="brand" href="/"><svg width="38" height="38" viewBox="0 0 512 512" style="display:block">
+    <defs>
+      <linearGradient id="cs1bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#2B231B"/><stop offset="1" stop-color="#130F0B"/>
+      </linearGradient>
+      <radialGradient id="cs1glow" cx="0.3" cy="0.2" r="0.85">
+        <stop offset="0" stop-color="#F0C97E" stop-opacity="0.3"/><stop offset="1" stop-color="#F0C97E" stop-opacity="0"/>
+      </radialGradient>
+      <linearGradient id="cs1gold" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#F6D488"/><stop offset="0.5" stop-color="#E2B15C"/><stop offset="1" stop-color="#B98A3F"/>
+      </linearGradient>
+    </defs>
+    <rect width="512" height="512" rx="118" fill="url(#cs1bg)"/>
+    <rect width="512" height="512" rx="118" fill="url(#cs1glow)"/>
+    <circle cx="256" cy="256" r="128" fill="none" stroke="url(#cs1gold)" stroke-width="26" stroke-linecap="round" stroke-dasharray="94 40" stroke-dashoffset="20"/>
+    <path fill="url(#cs1gold)" d="M256 312 C 214 280 190 256 190 228 C 190 206 207 191 227 191 C 240 191 251 198 256 208 C 261 198 272 191 285 191 C 305 191 322 206 322 228 C 322 256 298 280 256 312 Z"/>
+    <circle cx="347" cy="165" r="24" fill="#5FBDBD"/>
+  </svg>
   <div><h1>CameraSync</h1><p style="font-size:11.5px;color:#6f6760">งานของฉัน · {username}</p></div></a>
 </header>
 <span class="kicker">My Events</span>
-<h2 class="title">QR ทุกงานของคุณ <em style="font-style:italic;color:#8e5a54">ในหน้าเดียว</em></h2>
+<h2 class="title">QR ทุกงานของคุณ <em style="font-style:normal;color:oklch(84% .19 80.46)">ในหน้าเดียว</em></h2>
 <p class="count"><b>{me_count}</b> — รายการอัปเดตจากเครื่องที่เชื่อมต่ออยู่ของคุณ</p>
 <div class="grid">{cards}{empty}</div>
 <footer>CameraSync — รูปทั้งหมดอยู่บนเครื่องคุณ เราเป็นเพียงทางผ่าน · <a href="/" style="color:inherit;font-weight:600">หน้าแรก</a></footer>
@@ -1018,7 +1330,7 @@ async fn hub_fallback(State(state): State<SharedHub>, req: axum::extract::Reques
     let Some(id) = cookies.get(TUNNEL_COOKIE).cloned() else {
         return error_page(
             StatusCode::NOT_FOUND,
-            "CameraSync hub — แขกเข้าแกลเลอรีผ่านลิงก์ /e/{event-slug}/ ที่ได้จากงาน · ช่างภาพเริ่มที่หน้าแรก",
+            "CameraSync hub — ลูกค้าเข้าแกลเลอรีผ่านลิงก์ /e/{event-slug}/ ที่ได้จากงาน · ช่างภาพเริ่มที่หน้าแรก",
         );
     };
     proxy(&state, &id, method, path, headers, bytes).await

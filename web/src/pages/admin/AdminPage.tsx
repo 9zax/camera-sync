@@ -253,7 +253,7 @@ function EventCard({ event, index = 0 }: { event: AdminEvent; index?: number }) 
   const toggle = useMutation({
     mutationFn: () => api.post(`/api/events/${event.id}/enabled`, { enabled: event.enabled === 0 }),
     onSuccess: () => {
-      toast.success(event.enabled === 0 ? "เปิดใช้งานลิงก์แล้ว" : "พักลิงก์แล้ว — แขกจะเห็นว่าปิดชั่วคราว")
+      toast.success(event.enabled === 0 ? "เปิดใช้งานลิงก์แล้ว" : "พักลิงก์แล้ว — ลูกค้าจะเห็นว่าปิดชั่วคราว")
       void qc.invalidateQueries({ queryKey: ["events"] })
     },
     onError: (e) => toast.error(String(e)),
@@ -355,7 +355,7 @@ function EventCard({ event, index = 0 }: { event: AdminEvent; index?: number }) 
             className="ml-auto h-8 gap-1 rounded-md px-2.5 text-xs text-destructive hover:text-destructive"
             disabled={remove.isPending}
             onClick={() => {
-              if (confirm(`ลบงาน "${event.title}" ? ลิงก์แขกจะใช้ไม่ได้ทันที`)) remove.mutate()
+              if (confirm(`ลบงาน "${event.title}" ? ลิงก์ลูกค้าจะใช้ไม่ได้ทันที`)) remove.mutate()
             }}
           >
             ลบ
@@ -463,7 +463,7 @@ function CreateEventDialog() {
               <ScanFace className="size-4.5 text-primary" />
               <div>
                 <div className="text-sm font-medium">เปิดค้นหาด้วยใบหน้า</div>
-                <div className="text-xs text-muted-foreground">แขกถ่ายเซลฟี่หารูปตัวเองได้</div>
+                <div className="text-xs text-muted-foreground">ลูกค้าถ่ายเซลฟี่หารูปตัวเองได้</div>
               </div>
             </div>
             <Switch checked={form.face_enabled} onCheckedChange={(v) => set("face_enabled")(v)} />

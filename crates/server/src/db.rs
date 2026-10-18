@@ -18,13 +18,21 @@ pub async fn init_pool(cfg: &Config) -> anyhow::Result<SqlitePool> {
     sqlx::raw_sql(include_str!("../migrations/0001_init.sql"))
         .execute(&pool)
         .await?;
-    // Column added after 0001 shipped — guard with a pragma check so it stays
-    // idempotent on every start.
+    // Columns added after 0001 shipped — guard with pragma checks so they
+    // stay idempotent on every start.
     let cols: Vec<(String,)> = sqlx::query_as("SELECT name FROM pragma_table_info('events')")
         .fetch_all(&pool)
         .await?;
     if !cols.iter().any(|(name,)| name == "enabled") {
         sqlx::raw_sql("ALTER TABLE events ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+            .execute(&pool)
+            .await?;
+    }
+    let user_cols: Vec<(String,)> = sqlx::query_as("SELECT name FROM pragma_table_info('users')")
+        .fetch_all(&pool)
+        .await?;
+    if !user_cols.iter().any(|(name,)| name == "is_admin") {
+        sqlx::raw_sql("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
             .execute(&pool)
             .await?;
     }

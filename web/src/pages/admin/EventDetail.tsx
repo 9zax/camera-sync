@@ -375,7 +375,7 @@ function SharePanel({ ev }: { ev: AdminEvent }) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-display text-lg">
-            <QrCode className="size-5 text-primary" /> QR สำหรับแขก
+            <QrCode className="size-5 text-primary" /> QR สำหรับลูกค้า
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -530,7 +530,7 @@ function SettingsPanel({ ev }: { ev: AdminEvent }) {
               <div>
                 <div className="text-sm font-medium">ค้นหาด้วยใบหน้า</div>
                 <div className="text-xs text-muted-foreground">
-                  {form.face_enabled ? "เปิด — แขกถ่ายเซลฟี่หารูปตัวเองได้" : "ปิด — ลบข้อมูลใบหน้าทั้งหมดของงานนี้"}
+                  {form.face_enabled ? "เปิด — ลูกค้าถ่ายเซลฟี่หารูปตัวเองได้" : "ปิด — ลบข้อมูลใบหน้าทั้งหมดของงานนี้"}
                 </div>
               </div>
             </div>

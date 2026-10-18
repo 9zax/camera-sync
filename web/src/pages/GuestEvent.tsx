@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { AnimatePresence, motion, useAnimate, type Variants } from "motion/react"
+import { AnimatePresence, motion, useAnimate, useAnimationFrame, useMotionValue, useReducedMotion, type Variants } from "motion/react"
 import { CalendarDays, Heart, Images, Loader2, Lock, ScanFace, Sparkles } from "lucide-react"
 import { LogoMark } from "@/components/Logo"
 import { toast } from "sonner"
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { GalleryGrid, GallerySkeleton } from "@/components/GalleryGrid"
+import type { PhotoItem } from "@/lib/api"
 import { Lightbox } from "@/components/Lightbox"
 import { SelfieSearch } from "@/components/SelfieSearch"
 import { api, type EventInfo, type PhotoList } from "@/lib/api"
@@ -23,6 +24,113 @@ const stagger: Variants = {
 const riseIn: Variants = {
   hidden: { opacity: 0, y: 22 },
   show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.16, 1, 0.3, 1] } },
+}
+
+
+/** Tilted slow-drifting cover rail built from the event's own photos —
+ *  the shared link opens on a living cover, motion.dev gallery style. */
+function CoverRail({
+  photos,
+  onOpen,
+}: {
+  photos: PhotoItem[]
+  onOpen: (index: number) => void
+}) {
+  const reduced = useReducedMotion()
+  const W = 168
+  const H = 210
+  const GAP = 18
+  const setWidth = Math.max(photos.length, 1) * (W + GAP)
+  const x = useMotionValue(0)
+  const dragging = useRef(false)
+
+  useAnimationFrame((_, delta) => {
+    if (reduced || dragging.current || photos.length < 3) return
+    const d = Math.min(delta, 50) / 1000
+    let v = x.get() - 9 * d
+    if (v <= -setWidth) v += setWidth
+    if (v > 0) v -= setWidth
+    x.set(v)
+  })
+  const onDrag = () => {
+    const v = x.get()
+    if (v <= -setWidth) x.jump(v + setWidth)
+    else if (v > 0) x.jump(v - setWidth)
+  }
+  // rail shows photos[0..13]; lightbox index matches the full list order
+  const openIndex = (i: number) => onOpen(i)
+
+  if (photos.length < 3) return null
+  return (
+    <div className="relative overflow-hidden border-b border-[var(--rule)] bg-lacquer-deep/50 py-7">
+      <div style={{ perspective: 1500 }} className="relative">
+        <motion.div
+          style={{ rotateX: reduced ? 0 : 22, rotateZ: reduced ? 0 : -6, scale: 1.05 }}
+          className="origin-center"
+        >
+          <motion.div
+            className="flex cursor-grab justify-center active:cursor-grabbing"
+            style={{ x: reduced ? 0 : x, gap: GAP }}
+            drag={reduced ? false : "x"}
+            dragElastic={0.12}
+            dragMomentum
+            onDrag={onDrag}
+            onDragStart={() => (dragging.current = true)}
+            onDragEnd={() => setTimeout(() => (dragging.current = false), 2200)}
+          >
+            {[0, 1, 2].map((copy) =>
+              photos.map((p, i) => (
+                <CoverCard
+                  key={copy * photos.length + i}
+                  photoId={p.id}
+                  ratio={p.width && p.height ? `${p.width} / ${p.height}` : "4 / 5"}
+                  onOpen={() => openIndex(i)}
+                />
+              )),
+            )}
+          </motion.div>
+        </motion.div>
+      </div>
+      <p className="mt-5 text-center font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+        ลากเพื่อเลื่อนดู · คลิกภาพเพื่อดูใหญ่
+      </p>
+    </div>
+  )
+}
+
+function CoverCard({
+  photoId,
+  ratio,
+  onOpen,
+}: {
+  photoId: string
+  ratio: string
+  onOpen: () => void
+}) {
+  const down = useRef<{ x: number; y: number } | null>(null)
+  return (
+    <motion.button
+      onPointerDown={(e) => (down.current = { x: e.clientX, y: e.clientY })}
+      onClick={(e) => {
+        const d = down.current
+        if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return
+        onOpen()
+      }}
+      className="relative block shrink-0 cursor-grab overflow-hidden rounded-md bg-card p-1 ring-1 ring-[oklch(78%_0_0/0.16)] outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+      style={{ width: 168, height: 210, aspectRatio: undefined }}
+      whileHover={{ scale: 1.05 }}
+      transition={{ type: "spring", stiffness: 260, damping: 24 }}
+    >
+      <img
+        src={`/api/photos/${photoId}/file?variant=thumb`}
+        alt=""
+        draggable={false}
+        loading="lazy"
+        className="pointer-events-none h-full w-full select-none rounded-sm object-cover"
+        style={{ aspectRatio: ratio }}
+      />
+    </motion.button>
+  )
 }
 
 export default function GuestEvent() {
@@ -178,6 +286,10 @@ export default function GuestEvent() {
         </motion.div>
       </header>
 
+      {/* cover rail — the event's own photos as a tilted, slow-drifting
+          catalogue (motion.dev gallery-objects style); click opens lightbox */}
+      <CoverRail photos={photos.slice(0, 14)} onOpen={setLightboxIndex} />
+
       <main className="mx-auto max-w-6xl px-4 pt-8 sm:px-5">
         <Tabs value={tab} onValueChange={setTab}>
           <motion.div
@@ -263,13 +375,13 @@ export default function GuestEvent() {
 
       <footer className="mt-14 border-t border-border/60 py-8 text-center text-xs text-muted-foreground">
         <p className="flex items-center justify-center gap-1.5">
-          <Heart className="size-3.5 text-primary" /> ขับเคลื่อนโดย
+          <Heart className="size-3.5 text-primary" /> บริการโดย
           <Link to="/" className="inline-flex items-center gap-1 font-medium text-foreground">
             <LogoMark size={16} /> CameraSync
           </Link>
         </p>
         <p className="mt-2 flex items-center justify-center gap-1">
-          <Sparkles className="size-3" /> รูปจะอัปโหลดเพิ่มเรื่อย ๆ ระหว่างงาน — กดเข้ามาดูใหม่ได้เรื่อย ๆ
+          <Sparkles className="size-3" /> มีรูปใหม่เพิ่มเรื่อย ๆ ระหว่างงาน — เข้ามาดูใหม่ได้เลย
         </p>
       </footer>
 

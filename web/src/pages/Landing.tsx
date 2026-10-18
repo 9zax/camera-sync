@@ -57,31 +57,31 @@ const steps = [
   {
     n: "02",
     icon: QrCode,
-    title: "แขกสแกน QR ดูได้เลย",
-    desc: "วาง QR สวย ๆ บนโต๊ะหรือจอในงาน แขกเปิดลิงก์จากมือถือได้ทันที ไม่ต้องติดแอป ไม่ต้องสมัครสมาชิก ไม่ต้องขอเบอร์ใคร",
+    title: "ลูกค้าสแกน QR ดูได้เลย",
+    desc: "วาง QR สวย ๆ บนโต๊ะหรือจอในงาน ลูกค้าเปิดลิงก์จากมือถือได้ทันที ไม่ต้องติดแอป ไม่ต้องสมัครสมาชิก ไม่ต้องขอเบอร์ใคร",
   },
   {
     n: "03",
     icon: ScanFace,
     title: "ถ่ายเซลฟี่ เจอรูปตัวเอง",
-    desc: "แขกถ่ายเซลฟี่หนึ่งใบ ระบบรวมทุกรูปที่มีเขาอยู่ในเฟรมมาให้ครบ กดดาวน์โหลดทั้งชุดได้ในไม่กี่วินาที",
+    desc: "ลูกค้าถ่ายเซลฟี่หนึ่งใบ ระบบรวมทุกรูปที่มีเขาอยู่ในเฟรมมาให้ครบ กดดาวน์โหลดทั้งชุดได้ในไม่กี่วินาที",
   },
 ]
 
 const features = [
-  { icon: Zap, title: "รูปขึ้นสดระหว่างงาน", desc: "ช็อตใหม่โผล่บนมือถือแขกหลังกดชัตเตอร์ไม่กี่นาที บรรยากาศงานยังร้อนอยู่เลย" },
+  { icon: Zap, title: "รูปขึ้นสดระหว่างงาน", desc: "ช็อตใหม่โผล่บนมือถือลูกค้าหลังกดชัตเตอร์ไม่กี่นาที บรรยากาศงานยังร้อนอยู่เลย" },
   { icon: ScanFace, title: "หารูปตัวเองใน 5 วินาที", desc: "ไม่ต้องเลื่อนไล่ดูทีละรูป — ถ่ายเซลฟี่แล้วระบบรวมรูปที่มีคุณมาให้ครบในที่เดียว" },
-  { icon: UserX, title: "แขกไม่ต้องติดแอป ไม่ต้องสมัคร", desc: "สแกนแล้วดูได้เลย ไม่มีขั้นตอนสมัครสมาชิก ไม่มีการขอเบอร์หรืออีเมล ใครก็เข้าชมได้" },
-  { icon: HardDriveDownload, title: "ไฟล์เต็มความละเอียด ไม่มีลายน้ำ", desc: "แขกดาวน์โหลดรูปคุณภาพเต็ม ไม่มีลายน้ำบังคะแนนสวย ๆ ไม่จำกัดจำนวนรูป" },
-  { icon: ShieldCheck, title: "รูปเซลฟี่ไม่ถูกเก็บ", desc: "ใช้เฉพาะตอนค้นหาแล้วลบทิ้งทันที และปิดการค้นหาด้วยใบหน้าของแต่ละงานได้ในคลิกเดียว" },
-  { icon: Lock, title: "ล็อกงานด้วย PIN ได้", desc: "อยากให้เฉพาะแขกในงานเห็น ตั้ง PIN สั้น ๆ กันคนนอก ปลอดภัยแต่ยังเข้าง่ายสำหรับแขก" },
-  { icon: Wallet, title: "ใช้กี่งานก็ราคาเดิม", desc: "เป็นระบบของสตูดิโอคุณเอง ไม่มีค่าใช้จ่ายต่อรูป ต่อแขก หรือต่องาน" },
+  { icon: UserX, title: "ลูกค้าไม่ต้องติดแอป ไม่ต้องสมัคร", desc: "สแกนแล้วดูได้เลย ไม่มีขั้นตอนสมัครสมาชิก ไม่มีการขอเบอร์หรืออีเมล ใครก็เข้าชมได้" },
+  { icon: HardDriveDownload, title: "ไฟล์เต็มความละเอียด ไม่มีลายน้ำ", desc: "โหลดได้ไฟล์เต็มคุณภาพ ไม่มีลายน้ำ ไม่จำกัดจำนวนรูป" },
+  { icon: ShieldCheck, title: "รูปเซลฟี่ไม่ถูกเก็บ", desc: "ใช้แค่ตอนค้นหาแล้วลบทิ้งทันที และปิดฟีเจอร์นี้ได้ทีละงาน" },
+  { icon: Lock, title: "ล็อกงานด้วย PIN ได้", desc: "อยากให้เฉพาะลูกค้าในงานเห็น ตั้ง PIN สั้น ๆ กันคนนอก ปลอดภัยแต่ยังเข้าง่ายสำหรับลูกค้า" },
+  { icon: Wallet, title: "ใช้กี่งานก็ราคาเดิม", desc: "เป็นระบบของสตูดิโอคุณเอง ไม่มีค่าใช้จ่ายต่อรูป ต่อลูกค้า หรือต่องาน" },
   { icon: Images, title: "ครบทั้งงานใน drive เดียว", desc: "หนึ่งงาน = หนึ่งลิงก์ แชร์ง่าย ปรินท์ QR ติดโต๊ะได้ ดาวน์โหลดทั้งงานเป็น zip ได้ทันที" },
 ]
 
 const stats = [
-  ["~30 วินาที", "รูปใหม่ถึงมือแขก"],
-  ["0 แอป", "แขกไม่ต้องติดตั้ง"],
+  ["~30 วินาที", "รูปใหม่ถึงมือลูกค้า"],
+  ["0 แอป", "ลูกค้าไม่ต้องติดตั้ง"],
   ["100%", "ไฟล์เต็มคุณภาพ"],
 ]
 
@@ -120,10 +120,6 @@ export default function Landing() {
   const { scrollYProgress, scrollY } = useScroll()
   const progress = useSpring(scrollYProgress, { stiffness: 120, damping: 24, mass: 0.4 })
 
-  const heroRef = useRef<HTMLDivElement>(null)
-  const heroY = useTransform(scrollY, [0, 600], [0, reduced ? 0 : 120])
-  const heroOpacity = useTransform(scrollY, [0, 480], [1, 0])
-  const glowScale = useTransform(scrollY, [0, 600], [1, reduced ? 1 : 1.25])
 
   return (
     <div className="min-h-dvh">
@@ -145,6 +141,10 @@ export default function Landing() {
               ขั้นตอนการใช้งาน
               <span className="absolute -bottom-1 left-0 h-px w-0 bg-gold transition-all duration-300 group-hover:w-full" />
             </a>
+            <a href="/perf" className="group relative hidden text-[13.5px] text-muted-foreground transition-colors hover:text-foreground sm:block">
+              ประสิทธิภาพ
+              <span className="absolute -bottom-1 left-0 h-px w-0 bg-gold transition-all duration-300 group-hover:w-full" />
+            </a>
             <a href="#features" className="group relative hidden text-[13.5px] text-muted-foreground transition-colors hover:text-foreground sm:block">
               ฟีเจอร์ทั้งหมด
               <span className="absolute -bottom-1 left-0 h-px w-0 bg-gold transition-all duration-300 group-hover:w-full" />
@@ -158,37 +158,24 @@ export default function Landing() {
         </div>
       </header>
 
-      {/* hero */}
-      <section ref={heroRef} className="relative overflow-hidden">
-        <motion.div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(58%_44%_at_50%_0%,oklch(84%_0.19_80.46/0.07),transparent),radial-gradient(30%_26%_at_85%_18%,oklch(70%_0.12_188/0.06),transparent)]"
-          style={{ scale: glowScale }}
-          aria-hidden
-        />
-        {/* faint hairline grid for editorial texture */}
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:linear-gradient(to_right,var(--border)_1px,transparent_1px)] [background-size:25%_100%]"
-          aria-hidden
-        />
-        <motion.div
-          className="relative mx-auto max-w-5xl px-5 pb-14 pt-24 text-center sm:pt-32"
-          style={{ y: heroY, opacity: heroOpacity }}
-        >
+      {/* hero = the gallery itself (motion.dev gallery-objects style) */}
+      <div className="relative">
+        <ObjectsShowcase />
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center px-5 pb-14 text-center">
           <motion.div variants={stagger(0.12)} initial="hidden" animate="show">
             <motion.div variants={reveal}>
               <Kicker>Live Wedding Gallery</Kicker>
             </motion.div>
-
             <motion.h1
               variants={reveal}
-              className="mt-7 font-display text-[2.9rem] font-light leading-[1.05] tracking-tight text-foreground sm:text-7xl"
+              className="mt-6 font-display text-[2.6rem] font-light leading-[1.12] tracking-tight text-foreground drop-shadow-[0_2px_24px_oklch(4%_0.004_95/0.9)] sm:text-6xl"
             >
               ภาพงานแต่งของคุณ
               <br />
               <span className="relative inline-block text-gold">
-                <span>ออนไลน์ทันที</span>
+                ออนไลน์ทันที
                 <motion.span
-                  className="absolute -bottom-2 left-0 h-[3px] w-full origin-left rounded-full bg-gradient-to-r from-gold/0 via-gold to-gold/0"
+                  className="absolute -bottom-2 left-0 h-px w-full origin-left bg-gradient-to-r from-gold/0 via-gold to-gold/0"
                   initial={{ scaleX: 0 }}
                   animate={{ scaleX: 1 }}
                   transition={{ delay: 0.9, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
@@ -197,51 +184,52 @@ export default function Landing() {
               </span>{" "}
               ที่กดชัตเตอร์
             </motion.h1>
-
             <motion.p
               variants={reveal}
-              className="mx-auto mt-8 max-w-xl text-pretty text-[15.5px] leading-relaxed text-muted-foreground sm:text-lg"
+              className="mx-auto mt-6 max-w-xl text-pretty text-[15px] leading-relaxed text-foreground/80 drop-shadow-[0_1px_12px_oklch(4%_0.004_95/0.9)] sm:text-base"
             >
-              ระบบส่งรูปจากกล้องขึ้นแกลเลอรีให้เองระหว่างงาน แขกสแกน QR ดูรูปสด ๆ
-              และถ่ายเซลฟี่เพื่อหารูปของตัวเองได้ทันที — ครบจบในลิงก์เดียว
+              ถ่ายเสร็จ รูปขึ้นเว็บให้เองระหว่างงาน ลูกค้าสแกน QR ดูรูปสด ๆ
+              และถ่ายเซลฟี่เพื่อหารูปของตัวเองได้ทันที — จบในลิงก์เดียว
             </motion.p>
-
-            <motion.div variants={reveal} className="mt-10 flex flex-wrap items-center justify-center gap-3.5">
-              <Button asChild size="lg" className="group rounded-md px-8 text-[15px] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_48px_oklch(2%_0.004_95/0.4)]">
-                <Link to="/admin">
-                  <Camera className="mr-2 size-[18px]" /> เริ่มงานแรกของคุณ
-                </Link>
-              </Button>
-              <motion.a href="#how" whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>
-                <Button size="lg" variant="outline" className="rounded-md px-8 text-[15px]">
-                  ดูวิธีทำงาน
+            <motion.div variants={reveal} className="mt-8 flex flex-wrap items-center justify-center gap-3.5">
+              <span className="pointer-events-auto">
+                <Button asChild size="lg" className="rounded-md px-8 text-[15px] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_48px_oklch(2%_0.004_95/0.5)]">
+                  <Link to="/admin">
+                    <Camera className="mr-2 size-[18px]" /> เริ่มงานแรกของคุณ
+                  </Link>
                 </Button>
-              </motion.a>
-            </motion.div>
-
-            <motion.div
-              variants={reveal}
-              className="mx-auto mt-14 flex max-w-2xl items-stretch justify-center divide-x divide-border"
-            >
-              {stats.map(([v, l], i) => (
-                <motion.div
-                  key={l}
-                  initial={{ opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.7 + i * 0.12, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-                  className="flex-1 px-4 text-center"
-                >
-                  <div className="font-display text-2xl font-semibold text-foreground sm:text-[1.7rem]">{v}</div>
-                  <div className="mt-1 text-[11.5px] leading-snug text-muted-foreground">{l}</div>
-                </motion.div>
-              ))}
+              </span>
+              <span className="pointer-events-auto">
+                <motion.a href="#how" whileHover={{ y: -2 }} whileTap={{ scale: 0.97 }}>
+                  <Button size="lg" variant="outline" className="rounded-md border-[var(--rule-strong)] bg-lacquer-deep/60 px-8 text-[15px] backdrop-blur-sm">
+                    ดูวิธีทำงาน
+                  </Button>
+                </motion.a>
+              </span>
             </motion.div>
           </motion.div>
-        </motion.div>
-      </section>
+        </div>
+        <p className="pointer-events-none absolute inset-x-0 bottom-5 z-10 text-center font-mono text-[10.5px] uppercase tracking-[0.2em] text-foreground/55">
+          ลากเพื่อเลื่อนดู · คลิกภาพเพื่อดูรายละเอียด
+        </p>
+      </div>
 
-      {/* objects showcase — tilted infinite card stream */}
-      <ObjectsShowcase />
+      {/* stats hairline strip */}
+      <div className="mx-auto max-w-2xl px-5 py-10">
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          className="flex divide-x divide-[var(--rule)] border-t border-[var(--rule)]"
+        >
+          {stats.map(([v, l]) => (
+            <div key={l} className="flex-1 px-4 pt-4 text-center">
+              <div className="font-display text-2xl font-light text-foreground">{v}</div>
+              <div className="mt-1 text-[11.5px] leading-snug text-muted-foreground">{l}</div>
+            </div>
+          ))}
+        </motion.div>
+      </div>
 
       {/* how it works */}
       <Section id="how" className="py-24 sm:py-28">

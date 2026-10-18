@@ -1,306 +1,337 @@
-import { useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   AnimatePresence,
   motion,
   useAnimationFrame,
   useMotionValue,
   useReducedMotion,
-  useScroll,
-  useSpring,
   useTransform,
-  useVelocity,
+  type MotionValue,
 } from "motion/react"
 
 /**
- * "Objects" showcase for the landing page — a tilted, infinitely drifting
- * catalogue of photo cards in the spirit of motion.dev's gallery objects:
- * scrolling the page pushes the stream, hovering lifts a card out of the
- * plane and reveals its spec sheet, tapping picks it up with a springy wiggle.
+ * Hero gallery — the motion.dev "Gallery: Objects" experience as CameraSync's
+ * first screen: a tilted, bulged, three-row catalogue of wedding photographs
+ * that drifts slowly on its own, can be dragged forever, and opens a spec
+ * sheet on click. The landing headline overlays it.
+ *
+ * Photos are hotlinked from Unsplash with graceful degradation: if Unsplash
+ * removes one (404), the card falls back to a neighbouring photo from the
+ * pool, then to an inky brand panel — never a broken-image icon.
  */
 
-const CARD_W = 176
-const CARD_H = 226
-const GAP = 20
-const BASE_SPEED = 34 // px/s idle drift
+const CARD_W = 200
+const CARD_H = 250
+const GAP = 28
+const BULGE = 90
+const COLUMNS = 8
+const DRIFT = 10 // px/s slow-motion auto move
 
-// ---- deterministic "abstract wedding light" card art (inline SVG, no assets) ----
+// ---- verified Unsplash wedding photographs (free to use, hotlinked) ----
 
-const PALETTES: [string, string, string][] = [
-  ["#A0685F", "#7E4E49", "#E9C46A"],
-  ["#B98A82", "#8E5A54", "#F3E3C3"],
-  ["#8E6A5A", "#5F463E", "#E9C46A"],
-  ["#C4A48A", "#96705B", "#FAF7F2"],
-  ["#A97E6F", "#75504A", "#EFD9B4"],
-  ["#9C7A73", "#6B514C", "#E9C46A"],
+const UNSPLASH = [
+  "1519741497674-611481863552",
+  "1465495976277-4387d4b0b4c6",
+  "1522673607200-164d1b6ce486",
+  "1520854221256-17451cc331bf",
+  "1591604466107-ec97de577aff",
+  "1606800052052-a08af7148866",
+  "1583939003579-730e3918a45a",
+  "1519225421980-715cb0215aed",
+  "1510076857177-7470076d4098",
+  "1529636798458-92182e662485",
+  "1532712938310-34cb3982ef74",
+  "1515934751635-c81c6bc9a2d8",
+  "1537633552985-df8429e8048b",
+  "1474552226712-ac0f0961a954",
+  "1522057384400-681b421cfebc",
+  "1550005809-91ad75fb315f",
 ]
 
-function art(i: number): string {
-  const p = PALETTES[i % PALETTES.length]
-  const r = (n: number) => {
-    // tiny deterministic hash → 0..1
-    const v = Math.sin(i * 97.13 + n * 41.7) * 10000
-    return v - Math.floor(v)
-  }
-  const hearts = i % 3 === 0
-  const rings = !hearts && i % 3 === 1
-  return (
-    `data:image/svg+xml;utf8,` +
-    encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="352" height="452" viewBox="0 0 352 452">
-        <defs>
-          <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="${p[0]}"/><stop offset="1" stop-color="${p[1]}"/>
-          </linearGradient>
-          <radialGradient id="glow" cx="0.5" cy="0.35">
-            <stop offset="0" stop-color="${p[2]}" stop-opacity="0.85"/>
-            <stop offset="1" stop-color="${p[2]}" stop-opacity="0"/>
-          </radialGradient>
-        </defs>
-        <rect width="352" height="452" fill="url(#g)"/>
-        <circle cx="${80 + r(1) * 180}" cy="${90 + r(2) * 120}" r="${120 + r(3) * 90}" fill="url(#glow)"/>
-        <circle cx="${40 + r(4) * 260}" cy="${240 + r(5) * 160}" r="${60 + r(6) * 70}" fill="${p[2]}" opacity="0.14"/>
-        <circle cx="${30 + r(7) * 280}" cy="${40 + r(8) * 120}" r="${24 + r(9) * 40}" fill="#FAF7F2" opacity="0.2"/>
-        ${
-          hearts
-            ? `<path d="M176 300 C 128 262 100 236 100 204 C 100 180 119 163 141 163 C 156 163 168 171 176 183 C 184 171 196 163 211 163 C 233 163 252 180 252 204 C 252 236 224 262 176 300 Z" fill="#FAF7F2" opacity="0.9"/>`
-            : rings
-              ? `<g fill="none" stroke="#FAF7F2" stroke-width="10" opacity="0.85">
-                   <circle cx="150" cy="250" r="44"/><circle cx="202" cy="250" r="44"/>
-                 </g>`
-              : `<g stroke="${p[2]}" stroke-width="6" opacity="0.7" fill="none">
-                   <circle cx="176" cy="230" r="86"/><circle cx="176" cy="230" r="58"/>
-                 </g>`
-        }
-      </svg>`,
-    )
-  )
-}
-
-const SPECS = [
-  ["24mm · f/1.8 · ISO 640", "ขึ้นสด 18:42 น.", "เจอคุณใน 12 รูป ✓"],
-  ["50mm · f/2.8 · ISO 400", "ขึ้นสด 19:05 น.", "ไม่มีลายน้ำ ✓"],
-  ["85mm · f/1.4 · ISO 800", "ขึ้นสด 19:31 น.", "ดาวน์โหลดเต็มคุณภาพ"],
-  ["35mm · f/2 · ISO 500", "ขึ้นสด 20:02 น.", "ค้นด้วยเซลฟี่ 5 วิ"],
-  ["70mm · f/2.8 · ISO 320", "ขึ้นสด 20:47 น.", "PIN กันคนนอก ✓"],
+const NAMES: [string, string, string, string][] = [
+  ["พิธีลงทะเบียน", "First look", "35mm", "แสงเช้า"],
+  ["แหวนและช่อดอกไม้", "Detail", "85mm macro", "แสงนุ่ม"],
+  ["พระอาทิตย์ตก", "Portrait", "50mm", "โฮมเรือง"],
+  ["เดินลงแถว", "Processional", "24mm", "แสงธรรมชาติ"],
+  ["พิธีจูนใจ", "Ceremony", "70mm", "แบ็กไลต์"],
+  ["ของชำร่วย", "Detail", "60mm", "แสงไฟร้าน"],
+  ["งานเลี้ยงค่ำ", "Reception", "35mm", "แสงเทียน"],
+  ["คู่รักสีทอง", "Portrait", "85mm", "สตูดิโอ"],
+  ["จัดดอกไม้", "Detail", "100mm macro", "แสงหน้าต่าง"],
+  ["วอลซ์แรก", "Reception", "35mm", "สีทองอุ่น"],
+  ["ถนนสีครีม", "Portrait", "85mm", "บ่ายเย็น"],
+  ["เตรียมเจ้าสาว", "Preparation", "50mm", "หน้าต่างริมฝน"],
+  ["คนในงาน", "Candid", "35mm", "แสงในสวน"],
+  ["เชิญขึ้นเวที", "Speeches", "24mm", "แสงเวที"],
+  ["ดอกไม้บนโต๊ะ", "Detail", "60mm", "แสงชาม"],
+  ["กล่าวลา", "Farewell", "85mm", "ไฟสปาร์กเกลอร์"],
+  ["ชุดไทยสีงาช้าง", "Portrait", "50mm", "สตูดิโอ"],
+  ["บ้านไม้เก่า", "Location", "24mm", "แสงเช้า"],
+  ["พาสปอร์ตรัก", "Detail", "100mm", "ขาวดำ"],
+  ["รุ่งอรุณใหม่", "Portrait", "35mm", "น้ำเงินหม่น"],
+  ["งานเลี้ยงกลางแจ้ง", "Reception", "24mm", "สตริงไฟ"],
+  ["มือที่จับมือ", "Candid", "85mm", "แสงนุ่ม"],
+  ["ของขวัญเล็ก ๆ", "Detail", "60mm", "แสงกระจก"],
+  ["บทสรุปของคืน", "Finale", "35mm", "โบเก้ทอง"],
 ]
 
-const CARDS = Array.from({ length: 12 }, (_, i) => ({
-  art: art(i),
-  specs: SPECS[i % SPECS.length],
-  tilt: (i % 5) - 2, // resting tilt -2..2deg for a scattered feel
+type Item = { id: string; name: string; cat: string; lens: string; light: string; photoIdx: number }
+
+const ITEMS: Item[] = NAMES.map(([name, cat, lens, light], i) => ({
+  id: `cs-${i}`,
+  name,
+  cat,
+  lens,
+  light,
+  photoIdx: i % UNSPLASH.length,
 }))
 
-function Card({
-  card,
-  picked,
-  onPick,
+const code = (i: number) => `CS26—${String(i + 1).padStart(2, "0")}`
+const src = (idx: number, w = 520) =>
+  `https://images.unsplash.com/photo-${UNSPLASH[idx % UNSPLASH.length]}?q=80&w=${w}&auto=format&fit=crop`
+
+function GalleryCard({
+  item,
+  index,
+  scrollX,
+  centerOffset,
+  onOpen,
+  dimmed,
 }: {
-  card: (typeof CARDS)[number]
-  picked: boolean
-  onPick: () => void
+  item: Item
+  index: number
+  scrollX: MotionValue<number>
+  centerOffset: number
+  onOpen: () => void
+  dimmed: boolean
 }) {
-  const [hover, setHover] = useState(false)
+  // fallback chain: photo → neighbour photo (Unsplash deletes images over
+  // time) → brand panel. Never a broken-image icon.
+  const [tier, setTier] = useState(0) // 0 primary, 1 neighbour, 2 panel
+  const neighbour = (item.photoIdx + 5) % UNSPLASH.length
+
+  // cylindrical bulge — cards bow toward the viewer near the viewport centre
+  const z = useTransform(scrollX, (sx) => {
+    const d = Math.abs(centerOffset + sx)
+    return Math.max(0, BULGE * (1 - d / 950))
+  })
+  const scale = useTransform(z, [0, BULGE], [0.955, 1.035])
+
+  // distinguish click from drag on the shared surface
+  const down = useRef<{ x: number; y: number } | null>(null)
+
   return (
     <motion.button
-      onClick={onPick}
-      onHoverStart={() => setHover(true)}
-      onHoverEnd={() => setHover(false)}
-      className="group relative block shrink-0 cursor-grab rounded-2xl bg-card p-1.5 text-left ring-1 ring-[oklch(78%_0_0/0.16)] outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
-      style={{ width: CARD_W, height: CARD_H, transformPerspective: 900, zIndex: picked ? 30 : hover ? 20 : 1 }}
-      animate={
-        picked
-          ? { rotate: [0, -4, 3, -1.5, 0], scale: 1.12, y: -34, opacity: 1 }
-          : { rotate: hover ? 0 : card.tilt, scale: hover ? 1.08 : 1, y: hover ? -30 : 0, opacity: 1 }
-      }
-      transition={{ type: "spring", stiffness: 260, damping: 20 }}
+      onPointerDown={(e) => (down.current = { x: e.clientX, y: e.clientY })}
+      onClick={(e) => {
+        const d = down.current
+        if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return // was a drag
+        onOpen()
+      }}
+      className="group relative block shrink-0 cursor-grab overflow-hidden rounded-md bg-card p-1.5 text-left ring-1 ring-[oklch(78%_0_0/0.16)] outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+      style={{ width: CARD_W, height: CARD_H, z, scale }}
+      animate={{ opacity: dimmed ? 0.25 : 1 }}
+      whileHover={{ scale: 1.05 }}
+      transition={{ type: "spring", stiffness: 260, damping: 26 }}
     >
-      <img
-        src={card.art}
-        alt=""
-        draggable={false}
-        className="pointer-events-none h-full w-full select-none rounded-xl object-cover"
-      />
-      {/* spec sheet — slides up on hover / pick */}
-      <AnimatePresence>
-        {(hover || picked) && (
-          <motion.div
-            key="spec"
-            className="absolute inset-x-3 bottom-3 rounded-xl bg-background/85 p-2.5 shadow-lg backdrop-blur-md"
-            initial={{ opacity: 0, y: 24, filter: "blur(6px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: 16, filter: "blur(6px)" }}
-            transition={{ type: "spring", stiffness: 300, damping: 26 }}
-          >
-            {card.specs.map((s, k) => (
-              <motion.div
-                key={s}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.05 + k * 0.06 }}
-                className={
-                  k === 0
-                    ? "font-mono text-[10px] text-muted-foreground"
-                    : "text-[11px] font-medium text-foreground"
-                }
-              >
-                {s}
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <span className="pointer-events-none absolute right-2.5 top-2.5 size-1.5 rounded-full bg-white/70 opacity-0 transition-opacity group-hover:opacity-100" />
+      {tier < 2 ? (
+        <img
+          src={tier === 0 ? src(item.photoIdx) : src(neighbour)}
+          alt={`${item.name} — ${item.cat}`}
+          draggable={false}
+          loading="lazy"
+          onError={() => setTier((t) => t + 1)}
+          className="pointer-events-none h-full w-full select-none rounded-sm object-cover"
+        />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center rounded-sm bg-secondary">
+          <span className="font-mono text-[10px] tracking-[0.2em] text-muted-foreground">CAMERASYNC</span>
+        </span>
+      )}
+      <span className="pointer-events-none absolute left-3 top-2.5 font-mono text-[9.5px] tracking-[0.18em] text-gold drop-shadow-[0_1px_2px_rgba(0,0,0,.9)]">
+        {code(index)}
+      </span>
     </motion.button>
   )
 }
 
-function DriftRow({ dir, scrollBoost }: { dir: 1 | -1; scrollBoost: ReturnType<typeof useSpring> }) {
-  const x = useMotionValue(0)
-  const slow = useRef(false)
-  const set = CARDS.length * (CARD_W + GAP) // width of one full set
-  useAnimationFrame((_, delta) => {
-    const d = Math.min(delta, 50) / 1000
-    const boost = Math.min(Math.abs(scrollBoost.get()) * 0.55, 620)
-    const speed = (BASE_SPEED + boost) * (slow.current ? 0.12 : 1)
-    let v = x.get() + dir * speed * d
-    v = (((v % set) + set) % set) - set // keep in (-set, 0]
-    x.set(v)
-  })
+/** inspection layer — big photo + spec sheet (the "Detail" of the original) */
+function SpecLayer({
+  item,
+  index,
+  onClose,
+}: {
+  item: Item
+  index: number
+  onClose: () => void
+}) {
+  const [tier, setTier] = useState(0)
+  const neighbour = (item.photoIdx + 5) % UNSPLASH.length
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [onClose])
+
   return (
     <motion.div
-      className="flex py-2.5"
-      style={{ x }}
-      onHoverStart={() => (slow.current = true)}
-      onHoverEnd={() => (slow.current = false)}
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
     >
-      {[...CARDS, ...CARDS, ...CARDS].map((c, i) => (
-        <div key={i} style={{ marginRight: GAP }}>
-          <DriftCard card={c} />
-        </div>
-      ))}
-    </motion.div>
-  )
-}
-
-// row card without pick state (rows are ambient); picking belongs to hero cards
-function DriftCard({ card }: { card: (typeof CARDS)[number] }) {
-  const [hover, setHover] = useState(false)
-  return (
-    <motion.button
-      onHoverStart={() => setHover(true)}
-      onHoverEnd={() => setHover(false)}
-      className="group relative block shrink-0 cursor-grab rounded-2xl bg-card p-1.5 text-left ring-1 ring-[oklch(78%_0_0/0.16)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      style={{ width: CARD_W, height: CARD_H, transformPerspective: 900, zIndex: hover ? 20 : 1 }}
-      animate={{ rotate: hover ? 0 : card.tilt, scale: hover ? 1.07 : 1, y: hover ? -26 : 0 }}
-      transition={{ type: "spring", stiffness: 260, damping: 20 }}
-    >
-      <img src={card.art} alt="" draggable={false} className="pointer-events-none h-full w-full select-none rounded-xl object-cover" />
-      <AnimatePresence>
-        {hover && (
-          <motion.div
-            key="spec"
-            className="absolute inset-x-3 bottom-3 rounded-xl bg-background/85 p-2.5 shadow-lg backdrop-blur-md"
-            initial={{ opacity: 0, y: 24, filter: "blur(6px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: 16, filter: "blur(6px)" }}
-            transition={{ type: "spring", stiffness: 300, damping: 26 }}
-          >
-            {card.specs.map((s, k) => (
-              <motion.div
-                key={s}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.05 + k * 0.06 }}
-                className={k === 0 ? "font-mono text-[10px] text-muted-foreground" : "text-[11px] font-medium text-foreground"}
-              >
-                {s}
-              </motion.div>
+      <motion.div
+        className="absolute inset-0 bg-lacquer-deep/85 backdrop-blur-sm"
+        onClick={onClose}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+      />
+      <motion.div
+        className="relative z-10 flex max-h-[88dvh] w-full max-w-3xl flex-col gap-6 overflow-y-auto rounded-lg border border-[var(--rule-strong)] bg-card p-5 sm:flex-row sm:p-6"
+        initial={{ opacity: 0, y: 30, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 18, scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 280, damping: 28 }}
+      >
+        <motion.img
+          src={tier === 0 ? src(item.photoIdx, 900) : src(neighbour, 900)}
+          alt={item.name}
+          onError={() => setTier(1)}
+          className="max-h-[50dvh] w-full rounded-sm border border-[var(--rule)] object-cover sm:w-[52%]"
+          initial={{ opacity: 0, scale: 1.04 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.05, duration: 0.4 }}
+        />
+        <motion.div
+          className="flex flex-1 flex-col"
+          initial={{ opacity: 0, y: 22 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 12 }}
+          transition={{ type: "spring", stiffness: 300, damping: 28, delay: 0.08 }}
+        >
+          <p className="flex items-center justify-between font-mono text-[10.5px] tracking-[0.18em] text-gold">
+            {code(index)}
+            <span className="text-muted-foreground">
+              {String(index + 1).padStart(2, "0")} / {String(ITEMS.length).padStart(2, "0")}
+            </span>
+          </p>
+          <h3 className="mt-3 font-display text-2xl font-light text-foreground">{item.name}</h3>
+          <dl className="mt-5 space-y-3 border-t border-[var(--rule)] pt-4 text-[13px]">
+            {[
+              ["หมวด", item.cat],
+              ["เลนส์", item.lens],
+              ["แสง", item.light],
+              ["สถานะ", "ขึ้นเว็บทันทีที่ถ่ายเสร็จ"],
+            ].map(([k, v]) => (
+              <div key={k} className="flex justify-between gap-4">
+                <dt className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">{k}</dt>
+                <dd className="text-right text-foreground">{v}</dd>
+              </div>
             ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.button>
+          </dl>
+          <button
+            onClick={onClose}
+            className="mt-6 self-start border-b border-gold font-mono text-[11px] uppercase tracking-[0.18em] text-gold transition-opacity hover:opacity-75"
+          >
+            Close · ปิด
+          </button>
+        </motion.div>
+      </motion.div>
+    </motion.div>
   )
 }
 
 export function ObjectsShowcase() {
   const reduced = useReducedMotion()
-  const { scrollY } = useScroll()
-  const velocity = useVelocity(scrollY)
-  const boost = useSpring(velocity, { stiffness: 90, damping: 40 })
-  const [picked, setPicked] = useState<number | null>(null)
+  const [open, setOpen] = useState<{ item: Item; index: number } | null>(null)
 
-  // hero row: interactive, pick-up-able cards (the "collection catalogue")
-  const heroX = useMotionValue(0)
-  const set = CARDS.length * (CARD_W + GAP)
-  const heroSlow = useRef(false)
+  const rows = useMemo(() => {
+    const out: Item[][] = []
+    for (let i = 0; i < ITEMS.length; i += COLUMNS) out.push(ITEMS.slice(i, i + COLUMNS))
+    return out.slice(0, 3) // exactly three rows
+  }, [])
+
+  const setWidth = COLUMNS * (CARD_W + GAP)
+  const x = useMotionValue(-setWidth / 3)
+  const dragging = useRef(false)
+  const hoverSlow = useRef(false)
+
+  // slow-motion auto drift + infinite wrap; drag writes the same value
   useAnimationFrame((_, delta) => {
-    if (reduced) return
+    if (reduced || dragging.current) return
     const d = Math.min(delta, 50) / 1000
-    const b = Math.min(Math.abs(boost.get()) * 0.55, 620)
-    const speed = (BASE_SPEED * 1.15 + b) * (heroSlow.current ? 0.1 : 1)
-    let v = heroX.get() - speed * d
-    v = (((v % set) + set) % set) - set
-    heroX.set(v)
+    let v = x.get() - DRIFT * (hoverSlow.current ? 0.15 : 1) * d
+    if (v <= -setWidth) v += setWidth
+    if (v > 0) v -= setWidth
+    x.set(v)
   })
-  const heroRotate = useTransform(boost, (b) => -8 + Math.max(-120, Math.min(120, b)) * 0.004)
 
-  if (reduced) {
-    return (
-      <section className="border-t border-border/50 py-16">
-        <div className="mx-auto max-w-6xl px-5">
-          <p className="text-center font-display text-2xl font-semibold">ภาพจริง ขึ้นสด สวยทุกเฟรม</p>
-        </div>
-      </section>
-    )
+  const onDrag = () => {
+    const v = x.get()
+    if (v <= -setWidth) x.jump(v + setWidth)
+    else if (v > 0) x.jump(v - setWidth)
   }
 
   return (
-    <section className="relative overflow-hidden border-t border-border/50 py-16">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_60%_at_50%_40%,oklch(84%_0.19_80.46/0.05),transparent)]" aria-hidden />
-      <div className="relative mx-auto mb-9 max-w-6xl px-5 text-center">
-        <span className="inline-flex items-center gap-3 font-mono text-[10.5px] font-medium uppercase tracking-[0.22em] text-gold">
-          <span className="h-px w-8 bg-gold/60" /> Live preview <span className="h-px w-8 bg-gold/60" />
-        </span>
-        <h2 className="mt-5 font-display text-2xl font-semibold tracking-tight sm:text-4xl">
-          ภาพจริง ขึ้นสด <span className="italic text-primary">สวยทุกเฟรม</span>
-        </h2>
-        <p className="mt-3 text-[13px] text-muted-foreground">
-          เลื่อนหน้าเว็บเร็ว ๆ แล้วชมกระแสรูปไหลตาม — แตะการ์ดเพื่อหยิบขึ้นดูสเปก
-        </p>
-      </div>
-
-      {/* tilted plane */}
-      <div style={{ perspective: 1300 }} className="relative">
+    <section className="relative h-[100svh] min-h-[640px] overflow-hidden border-b border-[var(--rule)] bg-lacquer-deep">
+      {/* tilted, bulged plane — auto-drifts slowly, drag to browse */}
+      <div style={{ perspective: 1600 }} className="absolute inset-0 flex items-center">
         <motion.div
-          style={{ rotateX: 26, rotateZ: heroRotate, scale: 1.02 }}
-          className="origin-center will-change-transform"
+          className="w-full"
+          style={{ rotateX: reduced ? 0 : 26, rotateZ: reduced ? 0 : -7, scale: 1.04 }}
         >
-          {/* top row — ambient, drifting right */}
-          <div className="opacity-75 [-webkit-mask-image:linear-gradient(to_right,transparent,black_15%,black_85%,transparent)] [mask-image:linear-gradient(to_right,transparent,black_15%,black_85%,transparent)]">
-            <DriftRow dir={1} scrollBoost={boost} />
-          </div>
-          {/* hero row — interactive pick-up cards */}
           <motion.div
-            className="[-webkit-mask-image:linear-gradient(to_right,transparent,black_12%,black_88%,transparent)] [mask-image:linear-gradient(to_right,transparent,black_12%,black_88%,transparent)]"
-            style={{ x: heroX }}
-            onHoverStart={() => (heroSlow.current = true)}
-            onHoverEnd={() => (heroSlow.current = false)}
+            className="flex cursor-grab flex-col items-center gap-7 active:cursor-grabbing"
+            style={{ x: reduced ? 0 : x }}
+            drag={reduced ? false : "x"}
+            dragElastic={0.1}
+            dragMomentum
+            onDrag={onDrag}
+            onDragStart={() => (dragging.current = true)}
+            onDragEnd={() => {
+              // let momentum settle before the drift resumes
+              setTimeout(() => (dragging.current = false), 2200)
+            }}
+            onHoverStart={() => (hoverSlow.current = true)}
+            onHoverEnd={() => (hoverSlow.current = false)}
           >
-            <div className="flex py-2.5">
-              {[...CARDS, ...CARDS, ...CARDS].map((c, i) => (
-                <div key={i} style={{ marginRight: GAP }}>
-                  <Card card={c} picked={picked === i} onPick={() => setPicked(picked === i ? null : i)} />
-                </div>
-              ))}
-            </div>
+            {rows.map((row, r) => (
+              <div key={r} className="flex" style={{ gap: GAP }}>
+                {[...row, ...row, ...row].map((it, c) => {
+                  const canonical = r * COLUMNS + (c % row.length)
+                  const copy = Math.floor(c / row.length)
+                  const cardCenter = c * (CARD_W + GAP) + CARD_W / 2 - copy * setWidth - setWidth
+                  return (
+                    <div key={c} style={{ marginLeft: r % 2 === 1 && c === 0 ? (CARD_W + GAP) / 2 : 0 }}>
+                      <GalleryCard
+                        item={it}
+                        index={canonical}
+                        scrollX={x}
+                        centerOffset={cardCenter}
+                        onOpen={() => setOpen({ item: it, index: canonical })}
+                        dimmed={open !== null}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
           </motion.div>
-          {/* bottom row — ambient, drifting left */}
-          <div className="opacity-75 [-webkit-mask-image:linear-gradient(to_right,transparent,black_15%,black_85%,transparent)] [mask-image:linear-gradient(to_right,transparent,black_15%,black_85%,transparent)]">
-            <DriftRow dir={-1} scrollBoost={boost} />
-          </div>
         </motion.div>
       </div>
+
+      {/* readability scrim for the overlaid headline */}
+      <div
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(58%_46%_at_50%_40%,oklch(4%_0.004_95/0.62),transparent_75%)]"
+        aria-hidden
+      />
+
+      <AnimatePresence>
+        {open && <SpecLayer key={open.item.id} item={open.item} index={open.index} onClose={() => setOpen(null)} />}
+      </AnimatePresence>
     </section>
   )
 }

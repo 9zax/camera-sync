@@ -19,19 +19,28 @@ export function LogoMark({
       className={cn("shrink-0", className)}
     >
       <defs>
-        <linearGradient id="cs-bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#F0C97E" />
-          <stop offset=".55" stopColor="#E2B15C" />
-          <stop offset="1" stopColor="#C99544" />
+        <linearGradient id="csBg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#2B231B" />
+          <stop offset="1" stopColor="#130F0B" />
+        </linearGradient>
+        <radialGradient id="csGlow" cx="0.3" cy="0.2" r="0.85">
+          <stop offset="0" stopColor="#F0C97E" stopOpacity="0.3" />
+          <stop offset="1" stopColor="#F0C97E" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="csGold" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#F6D488" />
+          <stop offset="0.5" stopColor="#E2B15C" />
+          <stop offset="1" stopColor="#B98A3F" />
         </linearGradient>
       </defs>
-      <rect width="512" height="512" rx="118" fill="url(#cs-bg)" />
-      <circle cx="256" cy="252" r="122" fill="none" stroke="#241E1A" strokeWidth="24" />
-      <circle cx="352" cy="180" r="26" fill="#5FBDBD" />
+      <rect width="512" height="512" rx="118" fill="url(#csBg)" />
+      <rect width="512" height="512" rx="118" fill="url(#csGlow)" />
+      <circle cx="256" cy="256" r="128" fill="none" stroke="url(#csGold)" strokeWidth="26" strokeLinecap="round" strokeDasharray="94 40" strokeDashoffset="20" />
       <path
-        fill="#241E1A"
-        d="M256 316 C 212 283 186 258 186 228 C 186 206 203 190 224 190 C 238 190 249 197 256 209 C 263 197 274 190 288 190 C 309 190 326 206 326 228 C 326 258 300 283 256 316 Z"
+        fill="url(#csGold)"
+        d="M256 312 C 214 280 190 256 190 228 C 190 206 207 191 227 191 C 240 191 251 198 256 208 C 261 198 272 191 285 191 C 305 191 322 206 322 228 C 322 256 298 280 256 312 Z"
       />
+      <circle cx="347" cy="165" r="24" fill="#5FBDBD" />
     </svg>
   )
 }
