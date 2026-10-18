@@ -244,9 +244,7 @@ function SpecLayer({
   )
 }
 
-/** `height` lets other pages reuse the hero shorter than the landing's
- * full-screen first impression (e.g. /perf header). */
-export function ObjectsShowcase({ height = "h-[100svh] min-h-[640px]" }: { height?: string }) {
+export function ObjectsShowcase() {
   const reduced = useReducedMotion()
   const [open, setOpen] = useState<{ item: Item; index: number } | null>(null)
 
@@ -278,7 +276,7 @@ export function ObjectsShowcase({ height = "h-[100svh] min-h-[640px]" }: { heigh
   }
 
   return (
-    <section className={`relative overflow-hidden border-b border-[var(--rule)] bg-lacquer-deep ${height}`}>
+    <section className="relative h-[100svh] min-h-[640px] overflow-hidden border-b border-[var(--rule)] bg-lacquer-deep">
       {/* tilted, bulged plane — auto-drifts slowly, drag to browse */}
       <div style={{ perspective: 1600 }} className="absolute inset-0 flex items-center">
         <motion.div

@@ -3,7 +3,6 @@ import { Gauge, ShieldCheck, Users, Zap } from "lucide-react"
 import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Logo } from "@/components/Logo"
-import { ObjectsShowcase } from "@/components/ObjectsShowcase"
 
 const reveal: Variants = {
   hidden: { opacity: 0, y: 26 },
@@ -119,38 +118,18 @@ export default function Perf() {
         </div>
       </header>
 
-      {/* header = the same tilted photo grid as the landing, with the perf
-          headline overlaid on it */}
-      <div className="relative">
-        <ObjectsShowcase height="h-[72svh] min-h-[520px]" />
-        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center px-5 pb-10 text-center">
-          <motion.div variants={stagger} initial="hidden" animate="show">
-            <motion.span variants={reveal} className="inline-flex items-center gap-3 font-mono text-[10.5px] font-medium uppercase tracking-[0.22em] text-gold drop-shadow-[0_1px_10px_oklch(4%_0.004_95/0.9)]">
-              <span className="h-px w-8 bg-gold/70" /> Benchmark · 18 ต.ค. 2026 <span className="h-px w-8 bg-gold/70" />
-            </motion.span>
-            <motion.h1
-              variants={reveal}
-              className="mt-5 font-display text-4xl font-light leading-[1.14] tracking-tight text-foreground drop-shadow-[0_2px_24px_oklch(4%_0.004_95/0.9)] sm:text-5xl"
-            >
-              ตัวเลขจริงจากระบบเรา
-              <br />
-              <span className="text-gold">วัดเอง โปร่งใส</span>
-            </motion.h1>
-            <motion.p
-              variants={reveal}
-              className="mx-auto mt-4 max-w-xl text-pretty text-[14.5px] leading-relaxed text-foreground/80 drop-shadow-[0_1px_12px_oklch(4%_0.004_95/0.9)]"
-            >
-              load test ด้วยสถานการณ์เหมือนงานแต่งจริง ทุกการ์ดมีคำแปลภาษาคนทั่วไปกำกับไว้ให้
-            </motion.p>
-          </motion.div>
-        </div>
-      </div>
-
-      <main className="mx-auto max-w-5xl px-5 py-14">
+      <main className="mx-auto max-w-5xl px-5 py-16">
         <motion.div variants={stagger} initial="hidden" animate="show">
-          <motion.p variants={reveal} className="mx-auto max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
+          <motion.span variants={reveal} className="inline-flex items-center gap-3 font-mono text-[10.5px] font-medium uppercase tracking-[0.22em] text-gold">
+            <span className="h-px w-8 bg-gold/60" /> Benchmark · 18 ต.ค. 2026 <span className="h-px w-8 bg-gold/60" />
+          </motion.span>
+          <motion.h1 variants={reveal} className="mt-6 font-display text-4xl font-light tracking-tight sm:text-5xl">
+            ตัวเลขจริงจากระบบเรา <span className="text-gold">วัดเอง โปร่งใส</span>
+          </motion.h1>
+          <motion.p variants={reveal} className="mt-4 max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
             เรา load test ระบบของตัวเองด้วยสถานการณ์เหมือนงานแต่งจริง แล้วเก็บผลไว้ที่หน้านี้ —
             เทียบกับระบบแบบเดิมที่ต้องอัปโหลดรูปขึ้นคลาวด์อย่างชัดเจน ไม่มีตัวเลขสวยหลอกตา
+            ทุกการ์ดมีคำแปลภาษาคนทั่วไปกำกับไว้ให้อ่านจบเข้าใจได้เลย
           </motion.p>
 
           {/* our measured numbers */}

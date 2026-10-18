@@ -170,6 +170,8 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
         .route("/e/{slug}", any(guest_entry))
         .route("/e/{slug}/", any(guest_entry))
         .route("/e/{slug}/{*rest}", any(guest_entry))
+        .route("/perf", any(perf_entry))
+        .route("/assets/{*path}", any(assets_entry))
         .fallback(hub_fallback)
         .layer(axum::extract::DefaultBodyLimit::max(400 * 1024 * 1024))
         .with_state(state.clone());
@@ -1324,8 +1326,53 @@ async fn guest_entry(
 
 /// Fallback: cookie-bound traffic (/api/…, /assets/…, SPA routes) goes back
 /// to the same tunnel.
-async fn hub_fallback(State(state): State<SharedHub>, req: axum::extract::Request) -> Response {
+/// /perf — visitors holding a tunnel cookie keep riding their photographer's
+/// tunnel (freshest SPA); everyone else gets the SPA embedded in this hub
+/// binary, so the landing's performance button works for the public.
+async fn perf_entry(State(state): State<SharedHub>, req: axum::extract::Request) -> Response {
     let (method, path, headers, bytes) = read_request_parts(req).await;
+    let cookies = crate::util::parse_cookies(&headers);
+    if let Some(id) = cookies.get(TUNNEL_COOKIE).cloned() {
+        return proxy(&state, &id, method, path, headers, bytes).await;
+    }
+    match crate::embedded_web_asset("index.html") {
+        Some(html) => axum::response::Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "text/html; charset=utf-8")
+            .header("cache-control", "no-store")
+            .body(axum::body::Body::from(html.into_owned()))
+            .expect("static response"),
+        None => error_page(
+            StatusCode::NOT_FOUND,
+            "หน้าผลการวัดยังไม่พร้อมบน hub รุ่นนี้ — ลองใหม่อีกครั้งหลังช่างภาพอัปเดต",
+        ),
+    }
+}
+
+/// /assets/* — same rule as /perf: cookie-bound guests go through their
+/// tunnel, the public gets the SPA bundle embedded in this binary.
+async fn assets_entry(State(state): State<SharedHub>, req: axum::extract::Request) -> Response {
+    let (method, path, headers, bytes) = read_request_parts(req).await;
+    if path.contains("..") {
+        return error_page(StatusCode::NOT_FOUND, "not found");
+    }
+    let cookies = crate::util::parse_cookies(&headers);
+    if let Some(id) = cookies.get(TUNNEL_COOKIE).cloned() {
+        return proxy(&state, &id, method, path, headers, bytes).await;
+    }
+    let key = path.trim_start_matches('/');
+    match crate::embedded_web_asset(key) {
+        Some(bytes) => axum::response::Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", crate::mime_for(key))
+            .header("cache-control", "public, max-age=31536000, immutable")
+            .body(axum::body::Body::from(bytes.into_owned()))
+            .expect("static response"),
+        None => error_page(StatusCode::NOT_FOUND, "not found"),
+    }
+}
+
+async fn hub_fallback(State(state): State<SharedHub>, req: axum::extract::Request) -> Response {    let (method, path, headers, bytes) = read_request_parts(req).await;
     let cookies = crate::util::parse_cookies(&headers);
     let Some(id) = cookies.get(TUNNEL_COOKIE).cloned() else {
         return error_page(

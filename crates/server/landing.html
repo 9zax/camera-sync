@@ -48,6 +48,17 @@
   .brand { display:flex; align-items:center; gap:12px; text-decoration:none; color:inherit; }
   .brand h1 { font-family:"Kanit",sans-serif; font-size:17px; font-weight:500; letter-spacing:.14em; text-transform:uppercase; color:var(--text-bright); }
   .brand p { font-size:11px; color:var(--text-faint); margin-top:-3px; }
+  .nav { display:flex; align-items:center; gap:20px; }
+  .nav a.navlink { font-size:13px; color:var(--text-muted); text-decoration:none; transition:color .15s; }
+  .nav a.navlink:hover { color:var(--gold); }
+  .btn-line {
+    display:inline-flex; align-items:center; gap:8px; text-decoration:none;
+    background:#06c755; color:#08130a; font-weight:600; font-size:13px;
+    padding:9px 15px; border-radius:4px; transition:transform .15s, filter .15s;
+  }
+  .btn-line:hover { transform:translateY(-1px); filter:brightness(1.05); }
+  .btn-line svg { display:block; }
+  @media (max-width:720px){ .nav a.navlink { display:none; } }
   .top-cta {
     display:inline-flex; align-items:center; gap:8px; text-decoration:none;
     border:1px solid var(--rule-strong); color:var(--gold);
@@ -102,6 +113,39 @@
   .stats div + div { border-left:1px solid var(--rule); }
   .stats b { display:block; font-family:"Kanit",sans-serif; font-size:22px; font-weight:300; color:var(--text-bright); }
   .stats span { font-size:11.5px; color:var(--text-faint); }
+
+  /* hero photo grid — three tilted, slowly drifting rows of wedding photos */
+  @keyframes driftL { from { transform:translateX(0); } to { transform:translateX(-50%); } }
+  @keyframes driftR { from { transform:translateX(-50%); } to { transform:translateX(0); } }
+  .hero { min-height:78svh; display:flex; flex-direction:column; justify-content:center; padding:104px 0 88px; }
+  .hero > * { z-index:2; }
+  .heroart {
+    position:absolute; inset:-14% -10%; z-index:0; pointer-events:none;
+    display:flex; flex-direction:column; justify-content:center; gap:16px;
+    transform:perspective(1300px) rotateX(21deg) rotateZ(-6deg);
+    -webkit-mask-image:radial-gradient(130% 100% at 50% 42%, #000 52%, transparent 98%);
+    mask-image:radial-gradient(130% 100% at 50% 42%, #000 52%, transparent 98%);
+  }
+  .heroart::after {
+    content:""; position:absolute; inset:0;
+    background:linear-gradient(180deg,
+      oklch(7% 0.006 95 / .93), oklch(7% 0.006 95 / .48) 40%,
+      oklch(7% 0.006 95 / .55) 66%, oklch(7% 0.006 95 / .96));
+  }
+  .rail { display:flex; gap:12px; width:max-content; }
+  .rail img {
+    width:170px; height:208px; object-fit:cover; border-radius:4px;
+    border:1px solid var(--rule); background:var(--graphite);
+    box-shadow:0 22px 55px oklch(2% 0.004 95 / .55);
+  }
+  .r1 { animation:driftL 42s linear infinite; }
+  .r2 { animation:driftR 54s linear infinite; }
+  .r3 { animation:driftL 36s linear infinite; }
+  @media (max-width:720px){
+    .rail img { width:104px; height:128px; }
+    .hero { min-height:68svh; padding:84px 0 68px; }
+  }
+  @media (prefers-reduced-motion:reduce){ .rail { animation:none !important; } }
 
   /* cards */
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:10px 0 26px; }
@@ -204,13 +248,125 @@
         <p>แกลเลอรีงานแต่งสด · ค้นหารูปด้วยเซลฟี่</p>
       </div>
     </a>
-    <a class="top-cta" href="#start">
-      เริ่มใช้งาน
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-    </a>
+    <nav class="nav">
+      <a class="navlink" href="#start">ฟีเจอร์</a>
+      <a class="navlink" href="#how">วิธีทำงาน</a>
+      <a class="navlink" href="/perf">ผลการวัด</a>
+      <a class="btn-line" href="/r/line/start">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="#08130a" aria-hidden="true"><path d="M12 2C6.48 2 2 5.69 2 10.25c0 4.15 3.56 7.62 8.37 8.15.33.07.77.22.88.5.1.25.07.65.03.9l-.14.85c-.04.25-.2.98.86.53 1.06-.44 5.7-3.36 7.78-5.75C21.35 13.6 22 12.01 22 10.25C22 5.69 17.52 2 12 2ZM8.7 13.1H7.28a.38.38 0 0 1-.38-.38V8.9c0-.21.17-.38.38-.38s.38.17.38.38v3.44h1.04c.21 0 .38.17.38.38s-.17.38-.38.38Zm1.9-.38c0 .21-.17.38-.38.38a.38.38 0 0 1-.38-.38V8.9c0-.21.17-.38.38-.38s.38.17.38.38v3.82Zm3.55 0c0 .16-.1.3-.26.36a.4.4 0 0 1-.43-.1l-1.44-1.62v1.36a.38.38 0 0 1-.76 0V8.9c0-.16.1-.3.26-.36a.4.4 0 0 1 .43.1l1.44 1.62V8.9c0-.21.17-.38.38-.38s.38.17.38.38v3.82Zm2.5-2.28c.21 0 .38.17.38.38s-.17.38-.38.38h-1.04v.78h1.04c.21 0 .38.17.38.38s-.17.38-.38.38h-1.42a.38.38 0 0 1-.38-.38V8.9c0-.21.17-.38.38-.38h1.42c.21 0 .38.17.38.38s-.17.38-.38.38h-1.04v.78h1.04Z"/></svg>
+        เข้าสู่ระบบด้วย LINE
+      </a>
+    </nav>
   </header>
 
   <section class="hero">
+  <div class="heroart" aria-hidden="true">
+    <div class="rail r1">
+
+      <img src="https://images.unsplash.com/photo-1519741497674-611481863552?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1465495976277-4387d4b0b4c6?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1522673607200-164d1b6ce486?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1520854221256-17451cc331bf?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1591604466107-ec97de577aff?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1606800052052-a08af7148866?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1583939003579-730e3918a45a?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1519741497674-611481863552?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1465495976277-4387d4b0b4c6?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1522673607200-164d1b6ce486?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1520854221256-17451cc331bf?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1591604466107-ec97de577aff?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1606800052052-a08af7148866?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1583939003579-730e3918a45a?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+  </div>
+    <div class="rail r2">
+
+      <img src="https://images.unsplash.com/photo-1510076857177-7470076d4098?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1529636798458-92182e662485?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1532712938310-34cb3982ef74?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1537633552985-df8429e8048b?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1474552226712-ac0f0961a954?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1522057384400-681b421cfebc?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1550005809-91ad75fb315f?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1510076857177-7470076d4098?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1529636798458-92182e662485?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1532712938310-34cb3982ef74?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1537633552985-df8429e8048b?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1474552226712-ac0f0961a954?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1522057384400-681b421cfebc?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1550005809-91ad75fb315f?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+  </div>
+    <div class="rail r3">
+
+      <img src="https://images.unsplash.com/photo-1520854221256-17451cc331bf?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1591604466107-ec97de577aff?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1606800052052-a08af7148866?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1583939003579-730e3918a45a?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1510076857177-7470076d4098?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1529636798458-92182e662485?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1532712938310-34cb3982ef74?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1520854221256-17451cc331bf?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1591604466107-ec97de577aff?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1606800052052-a08af7148866?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1583939003579-730e3918a45a?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1510076857177-7470076d4098?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1529636798458-92182e662485?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+      <img src="https://images.unsplash.com/photo-1532712938310-34cb3982ef74?q=78&w=420&auto=format&fit=crop" alt="" loading="lazy" decoding="async">
+
+  </div>
+  </div>
     <span class="eyebrow rise d1">Live Wedding Gallery</span>
     <h2 class="rise d2">ภาพงานแต่งของคุณ<br><b>ออนไลน์ทันที<span class="u"></span></b> ที่กดชัตเตอร์</h2>
     <p class="rise d3">
@@ -240,6 +396,7 @@
         เริ่มงานแรกของคุณ
       </a>
       <a class="btn ghost" href="#how">ดูวิธีทำงาน</a>
+      <a class="btn ghost" href="/perf">ดูตัวเลข performance</a>
     </div>
     <div class="stats rise d5">
       <div><b>~30 วินาที</b><span>รูปใหม่ถึงมือลูกค้า</span></div>

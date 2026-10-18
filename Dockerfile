@@ -13,9 +13,20 @@ FROM rust:1-bookworm AS build
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
+# workspace member manifests must be readable even though the desktop app
+# itself is never built in here
+COPY desktop/src-tauri/Cargo.toml desktop/src-tauri/Cargo.toml
+COPY desktop/src-tauri/src desktop/src-tauri/src
+# web/dist must exist at compile time: rust-embed bakes the SPA into the
+# binary (the hub serves /perf + /assets/* from it for cookie-less visitors)
+COPY --from=web /app/web/dist ./web/dist
 RUN cargo build --release -p wedsync-server -p wedsync-agent
 # collect the onnxruntime shared lib(s) for the runtime image
 RUN mkdir -p /app/libs && find target/release/build -name "libonnxruntime*" -exec cp -L {} /app/libs/ \;
+# hub variant for bare-metal hub deploys: no face feature → no onnxruntime
+# shared-lib dependency, SPA still embedded
+RUN cargo build --release -p wedsync-server --no-default-features --target-dir /app/target-hub \
+    && cp /app/target-hub/release/wedsync-server /app/wedsync-server-hub
 
 # ---------- runtime ----------
 FROM debian:bookworm-slim
@@ -24,6 +35,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/target/release/wedsync-server /app/target/release/wedsync /usr/local/bin/
+COPY --from=build /app/wedsync-server-hub /usr/local/bin/wedsync-server-hub
 COPY --from=build /app/libs/ /usr/local/lib/
 COPY --from=web /app/web/dist /app/web/dist
 

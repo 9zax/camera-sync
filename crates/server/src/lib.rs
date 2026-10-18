@@ -29,6 +29,13 @@ use axum::extract::{Path, State};
 #[folder = "../../web/dist"]
 struct WebAssets;
 
+/// Embedded SPA lookup for the hub: it serves /perf and /assets/* to visitors
+/// who don't hold a tunnel cookie (guests with one keep riding their
+/// photographer's tunnel, which always has the freshest build).
+pub(crate) fn embedded_web_asset(path: &str) -> Option<std::borrow::Cow<'static, [u8]>> {
+    WebAssets::get(path).map(|f| f.data)
+}
+
 /// Global handle to the running server state (used by the desktop app).
 pub static SERVER_STATE: OnceLock<SharedState> = OnceLock::new();
 
@@ -458,7 +465,7 @@ async fn serve_favicon(State(st): State<SharedState>) -> axum::response::Respons
         .expect("static response")
 }
 
-fn mime_for(path: &str) -> &'static str {
+pub(crate) fn mime_for(path: &str) -> &'static str {
     match path.rsplit('.').next().unwrap_or("") {
         "js" | "mjs" => "text/javascript; charset=utf-8",
         "css" => "text/css; charset=utf-8",
