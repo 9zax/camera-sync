@@ -445,8 +445,16 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
                 show_main_window(tray.app_handle());
             }
         });
-    if let Some(icon) = app.default_window_icon() {
-        tray = tray.icon(icon.clone());
+    if let Ok(img) = tauri::image::Image::from_bytes(include_bytes!(
+        "../icons/tray-template-88.png"
+    )) {
+        tray = tray.icon(img);
+        // template image: monochrome silhouette + alpha, macOS tints it to
+        // match the menu bar (no white box / fringed colour icon)
+        #[cfg(target_os = "macos")]
+        {
+            tray = tray.icon_as_template(true);
+        }
     }
     tray.build(app)?;
     Ok(())
@@ -457,6 +465,16 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(App::default())
+        // closing the window must NOT quit: the photo server + hub tunnel
+        // keep running for guests. Quit lives in the tray menu only.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(|app| {
             build_tray(app)?;
             let handle = app.handle().clone();
