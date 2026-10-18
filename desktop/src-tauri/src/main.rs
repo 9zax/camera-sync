@@ -8,7 +8,11 @@
 use std::sync::{Arc, OnceLock, RwLock};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Emitter, Manager, State,
+};
 
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 fn rt() -> &'static tokio::runtime::Runtime {
@@ -398,12 +402,63 @@ async fn save_qr(app: AppHandle, state: State<'_, App>, slug: String) -> Result<
     Ok(Some(path))
 }
 
+fn show_main_window(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+/// Menu-bar presence: the app is LSUIElement (no dock icon), so the tray is
+/// the only way back in after the window is closed — and a quick status peek
+/// without opening anything.
+fn build_tray(app: &tauri::App) -> tauri::Result<()> {
+    let show = MenuItem::with_id(app, "show", "เปิดหน้าต่าง CameraSync", true, None::<&str>)?;
+    let admin = MenuItem::with_id(app, "admin", "เปิดหน้าเว็บแอดมิน", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "ปิดโปรแกรม (เซิร์ฟเวอร์จะหยุด)", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &admin, &quit])?;
+    let mut tray = TrayIconBuilder::with_id("main")
+        .tooltip("CameraSync — เครื่องช่างภาพ (เซิร์ฟเวอร์ทำงานอยู่เบื้องหลัง)")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => show_main_window(app),
+            "admin" => {
+                let port = app
+                    .try_state::<App>()
+                    .and_then(|s| *s.port.read().unwrap())
+                    .unwrap_or(8080);
+                use tauri_plugin_opener::OpenerExt;
+                let _ = app.opener().open_url(format!("http://localhost:{port}/admin"), None::<&str>);
+            }
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(App::default())
         .setup(|app| {
+            build_tray(app)?;
             let handle = app.handle().clone();
             // auto-start the embedded photo-drive server (zero-input)
             let server_handle = handle.clone();
