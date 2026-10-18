@@ -35,6 +35,7 @@ struct App {
     hub_url: RwLock<String>,
     tunnel_status: RwLock<String>,
     line_user: RwLock<String>,
+    tunnel_task: RwLock<Option<tokio::task::JoinHandle<()>>>,
 }
 
 #[derive(Serialize)]
@@ -68,6 +69,81 @@ impl App {
             h
         }
     }
+}
+
+// ---- persisted LINE machine session (token valid 90 days on the hub) ----
+
+fn machine_session_path() -> std::path::PathBuf {
+    default_data_dir().join("machine-session.json")
+}
+
+fn save_machine_session(creds: &wedsync_agent::MachineCreds) {
+    let res = (|| -> std::io::Result<()> {
+        use std::io::Write;
+        std::fs::create_dir_all(default_data_dir())?;
+        let json = serde_json::to_vec(creds)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        #[cfg(unix)]
+        let mut opts = {
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut o = std::fs::OpenOptions::new();
+            o.mode(0o600);
+            o
+        };
+        #[cfg(not(unix))]
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        opts.open(machine_session_path())?.write_all(&json)?;
+        Ok(())
+    })();
+    if let Err(e) = res {
+        eprintln!("save machine session failed: {e}");
+    }
+}
+
+fn read_machine_session() -> Option<wedsync_agent::MachineCreds> {
+    serde_json::from_slice(&std::fs::read(machine_session_path()).ok()?).ok()
+}
+
+fn clear_machine_session() {
+    let _ = std::fs::remove_file(machine_session_path());
+}
+
+/// Start (or restart) the hub tunnel with the given machine credentials.
+/// Shared by fresh LINE logins and the auto-reconnect on app launch.
+fn start_tunnel_task(app: &tauri::AppHandle, hub: String, port: u16, creds: wedsync_agent::MachineCreds) {
+    let state = app.state::<App>();
+    if let Some(prev) = state.tunnel_task.write().unwrap().take() {
+        prev.abort();
+    }
+    *state.hub_url.write().unwrap() = hub.clone();
+    *state.line_user.write().unwrap() = creds.tunnel_id.clone();
+    *state.tunnel_status.write().unwrap() = "กำลังเชื่อมต่อ hub…".into();
+    let cfg = wedsync_agent::TunnelConfig {
+        server: format!("http://localhost:{port}"),
+        relay: hub,
+        id: None,
+        user: None,
+        pass: None,
+        machine: Some(creds),
+    };
+    let app_handle = app.clone();
+    let status_cb: wedsync_agent::StatusCb = {
+        let app_handle = app_handle.clone();
+        Arc::new(move |s: &str| {
+            if let Some(state) = app_handle.try_state::<App>() {
+                *state.tunnel_status.write().unwrap() = s.to_string();
+            }
+            let _ = app_handle.emit("tunnel-status", s);
+        })
+    };
+    let handle = rt().spawn(async move {
+        if let Err(e) = wedsync_agent::run_tunnel_forever_status(cfg, status_cb).await {
+            eprintln!("tunnel stopped: {e:#}");
+            let _ = app_handle.emit("tunnel-status", &format!("เชื่อมต่อไม่สำเร็จ: {e}"));
+        }
+    });
+    *state.tunnel_task.write().unwrap() = Some(handle);
 }
 
 fn guest_base(hub: &str) -> String {
@@ -175,30 +251,22 @@ async fn line_connect(app: AppHandle, state: State<'_, App>, state_key: String) 
         .await
         .map_err(|e| format!("LINE Login ไม่สำเร็จ: {e}"))?;
 
-    *state.line_user.write().unwrap() = creds.tunnel_id.clone();
-    *state.tunnel_status.write().unwrap() = "กำลังเชื่อมต่อ hub…".into();
-
-    let cfg = wedsync_agent::TunnelConfig {
-        server: format!("http://localhost:{port}"),
-        relay: hub,
-        id: None,
-        user: None,
-        pass: None,
-        machine: Some(creds.clone()),
-    };
-    let app_handle = app.clone();
-    let status_cb: wedsync_agent::StatusCb = Arc::new(move |s: &str| {
-        if let Some(state) = app_handle.try_state::<App>() {
-            *state.tunnel_status.write().unwrap() = s.to_string();
-        }
-        let _ = app_handle.emit("tunnel-status", s);
-    });
-    rt().spawn(async move {
-        if let Err(e) = wedsync_agent::run_tunnel_forever_status(cfg, status_cb).await {
-            eprintln!("tunnel stopped: {e:#}");
-        }
-    });
+    // remember the machine token so reopening the app reconnects silently
+    save_machine_session(&creds);
+    start_tunnel_task(&app, hub, port, creds.clone());
     Ok(creds.tunnel_id)
+}
+
+#[tauri::command]
+fn line_logout(app: AppHandle, state: State<'_, App>) -> Result<(), String> {
+    if let Some(t) = state.tunnel_task.write().unwrap().take() {
+        t.abort();
+    }
+    clear_machine_session();
+    *state.line_user.write().unwrap() = String::new();
+    *state.tunnel_status.write().unwrap() = "ยังไม่เชื่อมต่อ".into();
+    let _ = app.emit("tunnel-status", "ยังไม่เชื่อมต่อ");
+    Ok(())
 }
 
 #[tauri::command]
@@ -312,6 +380,7 @@ fn main() {
         .setup(|app| {
             let handle = app.handle().clone();
             // auto-start the embedded photo-drive server (zero-input)
+            let server_handle = handle.clone();
             rt().spawn(async move {
                 let mut port = None;
                 for p in 8080..8090 {
@@ -321,12 +390,56 @@ fn main() {
                     }
                 }
                 let Some(port) = port else {
-                    eprintln!("no free port 8080-8089");
+                    eprintln!("no free port 8080-8090");
                     return;
                 };
-                if let Some(state) = handle.try_state::<App>() {
+                if let Some(state) = server_handle.try_state::<App>() {
                     *state.port.write().unwrap() = Some(port);
                 }
+                // reconnect with the saved LINE machine session (if any) as
+                // soon as the local server is actually accepting connections
+                let tunnel_handle = server_handle.clone();
+                rt().spawn(async move {
+                    for _ in 0..120 {
+                        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    }
+                    let Some(creds) = read_machine_session() else {
+                        return;
+                    };
+                    let hub = wedsync_server::default_hub();
+                    if let Some(state) = tunnel_handle.try_state::<App>() {
+                        *state.tunnel_status.write().unwrap() =
+                            "เชื่อมต่ออัตโนมัติด้วยบัญชี LINE ที่บันทึกไว้…".into();
+                    }
+                    let _ = tunnel_handle.emit("tunnel-status", "กำลังเชื่อมต่อ hub…");
+                    start_tunnel_task(&tunnel_handle, hub, port, creds);
+                    // watchdog: if the saved token never connects (expired /
+                    // revoked), clear it so the login button comes back
+                    let watch = tunnel_handle.clone();
+                    rt().spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_secs(25)).await;
+                        if let Some(state) = watch.try_state::<App>() {
+                            let ok = state
+                                .tunnel_status
+                                .read()
+                                .unwrap()
+                                .contains("เชื่อมต่อแล้ว");
+                            if !ok {
+                                clear_machine_session();
+                                *state.line_user.write().unwrap() = String::new();
+                                *state.tunnel_status.write().unwrap() =
+                                    "บัญชี LINE ที่บันทึกไว้ใช้ไม่ได้แล้ว — ล็อกอินใหม่อีกครั้ง".into();
+                                let _ = watch.emit(
+                                    "tunnel-status",
+                                    "บัญชี LINE ที่บันทึกไว้ใช้ไม่ได้แล้ว — ล็อกอินใหม่อีกครั้ง",
+                                );
+                            }
+                        }
+                    });
+                });
                 let import = default_import_dir();
                 std::fs::create_dir_all(&import).ok();
                 if let Err(e) =
@@ -341,6 +454,7 @@ fn main() {
             get_status,
             line_login,
             line_connect,
+            line_logout,
             add_photo_folder,
             open_in_browser,
             delete_event,

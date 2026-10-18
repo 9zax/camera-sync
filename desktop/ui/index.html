@@ -185,6 +185,7 @@
           <div class="kv"><span>โฟลเดอร์รอรูป</span><span id="importDir">—</span></div>
           <div class="kv"><span>hub</span><span id="hubUrl">—</span></div>
           <button class="secondary" id="adminBtn" style="margin-top:8px">เปิดหน้าจัดการ</button>
+          <button class="secondary" id="logoutBtn" style="margin-top:8px;margin-left:6px;color:#b3261e;background:#fbe9e7">ออกจากระบบ LINE บนเครื่องนี้</button>
         </div>
       </details>
     </div>
@@ -400,6 +401,19 @@
       $("adminBtn").onclick = async () => {
         const s = await invoke("get_status");
         if (s.port) await invoke("open_in_browser", { url: "http://localhost:" + s.port + "/admin" });
+      };
+
+      $("logoutBtn").onclick = async () => {
+        if (!confirm("ออกจากระบบ LINE บนเครื่องนี้?\n\nลิงก์แขกจะใช้ไม่ได้จนกว่าจะล็อกอินใหม่ (รูปทั้งหมดยังอยู่ในเครื่องตามปกติ)")) return;
+        try {
+          await invoke("line_logout");
+          connected = false;
+          $("loginCard").style.display = "";
+          toast("ออกจากระบบแล้ว — ล็อกอินใหม่ได้ทุกเมื่อ");
+          refresh();
+        } catch (e) {
+          toast(String(e));
+        }
       };
     </script>
   </body>

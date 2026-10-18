@@ -41,7 +41,7 @@ pub struct TunnelConfig {
     pub machine: Option<MachineCreds>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct MachineCreds {
     pub tunnel_id: String,
     pub token: String,
