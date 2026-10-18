@@ -53,6 +53,8 @@ type Job = (ReqMsg, oneshot::Sender<Result<RespMsg, String>>);
 
 pub struct HubState {
     db: sqlx::SqlitePool,
+    /// installer files served from /download/{file} (app installers, never photos)
+    downloads_dir: std::path::PathBuf,
     /// tunnel_id → (connection key, outbound job channel). A new connection
     /// for the same id replaces the old one; the old task's cleanup checks
     /// the key and leaves the fresh registration alone.
@@ -86,10 +88,13 @@ const HOP_HEADERS: &[&str] = &[
 /// Run the hub. `data_dir` holds only accounts/registry — media directories
 /// are deliberately NOT created and no image bytes are ever written.
 pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
-    let cfg = crate::config::Config::load(data_dir, false)?;
+    let cfg = crate::config::Config::load(data_dir.clone(), false)?;
     let db = crate::db::init_pool(&cfg).await?;
+    let downloads_dir = data_dir.join("downloads");
+    tokio::fs::create_dir_all(&downloads_dir).await.ok();
     let state: SharedHub = Arc::new(HubState {
         db,
+        downloads_dir,
         tunnels: Mutex::new(HashMap::new()),
         slug_map: Mutex::new(HashMap::new()),
         line_pending: Mutex::new(HashMap::new()),
@@ -97,12 +102,16 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
     });
 
     let app = Router::new()
+        .route("/", get(landing))
+        .route("/index.html", get(landing))
+        .route("/download/{file}", get(download_file))
         .route("/r/register", post(register))
         .route("/r/login", post(login))
         .route("/r/line/begin", get(line_begin))
         .route("/r/line/login", get(line_login_redirect))
         .route("/r/line/callback", get(line_callback))
         .route("/r/line/poll", get(line_poll))
+        .route("/r/line/start", get(line_web_start))
         .route("/r/connect/{id}", get(ws_connect))
         .route("/t/{id}/{*rest}", any(tunnel_entry))
         .route("/e/{slug}", any(guest_entry))
@@ -125,6 +134,82 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
     tracing::info!("hub listening on {addr}");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+// ---------- public landing + app download ----------
+
+async fn landing() -> Response {
+    axum::response::Html(include_str!("../landing.html")).into_response()
+}
+
+#[derive(Deserialize)]
+struct DownloadPath {
+    file: String,
+}
+
+/// Serve installer files from `<data_dir>/downloads/` (app installers only —
+/// never photos; the hub has no media storage by design).
+async fn download_file(
+    State(st): State<SharedHub>,
+    Path(p): Path<DownloadPath>,
+) -> Response {
+    let safe: String = p
+        .file
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        .collect();
+    if safe.is_empty() || safe.starts_with('.') || safe.contains("..") {
+        return crate::error::AppError::bad("ชื่อไฟล์ไม่ถูกต้อง").into_response();
+    }
+    let path = st
+        .downloads_dir
+        .join(&safe);
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => {
+            let mut resp = Response::builder()
+                .status(StatusCode::OK)
+                .header(axum::http::header::CONTENT_TYPE, "application/octet-stream")
+                .body(axum::body::Body::from(bytes))
+                .expect("static response");
+            if let Ok(v) = HeaderValue::from_str(&format!("attachment; filename=\"{safe}\"")) {
+                resp.headers_mut()
+                    .insert(axum::http::header::CONTENT_DISPOSITION, v);
+            }
+            resp
+        }
+        Err(_) => crate::error::AppError::not_found(
+            "ยังไม่มีไฟล์ติดตั้งสำหรับดาวน์โหลด — ติดต่อแอดมิน หรือใช้บัญชี username/password จากแอดมินก่อน",
+        )
+        .into_response(),
+    }
+}
+
+/// Web-based LINE login start (landing page button): create a pending state
+/// and redirect straight to LINE. The desktop app uses /r/line/begin instead.
+async fn line_web_start(
+    State(st): State<SharedHub>,
+    headers: HeaderMap,
+) -> Response {
+    let Some((id, _secret)) = line_config() else {
+        return crate::error::AppError::ServiceUnavailable(
+            "ระบบล็อกอินด้วย LINE ยังไม่เปิดใช้งาน — ใช้บัญชี username/password ที่ได้จากแอดมินได้เลย".into(),
+        )
+        .into_response();
+    };
+    let state_key = crate::util::random_token()[..24].to_string();
+    st.line_pending.lock().await.insert(
+        state_key.clone(),
+        LinePending {
+            created: crate::util::now_ms(),
+            done: None,
+        },
+    );
+    let redirect_uri = format!("{}/r/line/callback", hub_base_url(&headers));
+    let authorize = format!(
+        "https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id={id}&redirect_uri={}&state={state_key}&scope=profile%20openid",
+        pct_encode(&redirect_uri)
+    );
+    (StatusCode::FOUND, [("Location", authorize)]).into_response()
 }
 
 // ---------- accounts ----------
@@ -738,7 +823,7 @@ async fn hub_fallback(State(state): State<SharedHub>, req: axum::extract::Reques
     let Some(id) = cookies.get(TUNNEL_COOKIE).cloned() else {
         return error_page(
             StatusCode::NOT_FOUND,
-            "CameraSync hub — เข้าแกลเลอรีผ่านลิงก์ /e/{event-slug}/ ที่ได้จากระบบ",
+            "CameraSync hub — แขกเข้าแกลเลอรีผ่านลิงก์ /e/{event-slug}/ ที่ได้จากงาน · ช่างภาพเริ่มที่หน้าแรก",
         );
     };
     proxy(&state, &id, method, path, headers, bytes).await

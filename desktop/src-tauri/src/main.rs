@@ -81,17 +81,23 @@ fn get_status(app: State<'_, App>) -> Status {
 }
 
 #[tauri::command]
-fn pick_import_folder(app: AppHandle, state: State<'_, App>) -> Option<String> {
+async fn pick_import_folder(
+    app: AppHandle,
+    state: State<'_, App>,
+) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
-    let folder = app
-        .dialog()
-        .file()
-        .blocking_pick_folder()
-        .map(|p| p.to_string());
+    // async command runs off the main thread; the dialog must render on the
+    // main event loop, so use the callback API instead of the blocking one
+    // (blocking_pick_folder here deadlocks the main thread → app freeze).
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |file| {
+        let _ = tx.send(file.map(|p| p.to_string()));
+    });
+    let folder: Option<String> = rx.await.map_err(|e| e.to_string())?;
     if let Some(ref f) = folder {
         *state.import_dir.write().unwrap() = Some(f.clone());
     }
-    folder
+    Ok(folder)
 }
 
 #[tauri::command]
