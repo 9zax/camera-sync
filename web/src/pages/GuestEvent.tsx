@@ -300,10 +300,6 @@ export default function GuestEvent() {
         </motion.div>
       </header>
 
-      {/* cover rail — the event's own photos as a tilted, slow-drifting
-          catalogue (motion.dev gallery-objects style); click opens lightbox */}
-      <CoverRail photos={photos.slice(0, 24)} onOpen={setLightboxIndex} />
-
       <main className="mx-auto max-w-6xl px-4 pt-8 sm:px-5">
         <Tabs value={tab} onValueChange={setTab}>
           <motion.div
@@ -331,13 +327,18 @@ export default function GuestEvent() {
             transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
           >
             {tab === "gallery" ? (
-              photosQuery.isLoading ? (
-                <GallerySkeleton />
-              ) : photos.length === 0 ? (
-                <EmptyGallery />
-              ) : (
-                <GalleryGrid photos={photos} onOpen={setLightboxIndex} />
-              )
+              <>
+                <div className="mb-8">
+                  <CoverRail photos={photos.slice(0, 24)} onOpen={setLightboxIndex} />
+                </div>
+                {photosQuery.isLoading ? (
+                  <GallerySkeleton />
+                ) : photos.length === 0 ? (
+                  <EmptyGallery />
+                ) : (
+                  <GalleryGrid photos={photos} onOpen={setLightboxIndex} />
+                )}
+              </>
             ) : info.face_enabled ? (
               <SelfieSearch slug={slug} />
             ) : (
