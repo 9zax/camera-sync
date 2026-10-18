@@ -1,0 +1,56 @@
+# CameraSync — docker compose
+#
+# หลักการ: ไฟล์ทั้งหมด (รูป, ฐานข้อมูล, โมเดล) อยู่ใน volume ./data ของเครื่องคุณเอง
+# เปิดไว้ตลอด (restart: unless-stopped) แขกเข้าผ่าน http://<เครื่องคุณ>:8080
+#
+# ครั้งแรก:
+#   docker compose build
+#   docker compose run --rm models        # ดาวน์โหลดโมเดล face search (~280MB ครั้งเดียว)
+#   docker compose up -d
+#   เปิด http://localhost:8080/admin แล้วตั้ง user/pass ของตัวเอง
+#
+# tunnel relay (ถ้ามี VPS ตัวหนึ่งให้คนนอกวงเน็ตเข้าถึงเครื่องช่างภาพ):
+#   docker compose --profile relay up -d relay   # รันที่ VPS, expose พอร์ต 9000
+#   แล้วที่เครื่องช่างภาพ: wedsync tunnel --server http://localhost:8080 \
+#        --relay ws://<vps>:9000 --id my-wedding
+
+services:
+  camerasync:
+    build: .
+    image: camerasync:latest
+    container_name: camerasync
+    restart: unless-stopped # เปิดไว้ตลอด
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data # ดิสก์เครื่องคุณเองคือพื้นที่เก็บหลัก
+    environment:
+      FACE_THRESHOLD: ${FACE_THRESHOLD:-0.35}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:8080}
+      # ถ้าอยากให้ server อ่านโฟลเดอร์รูปในเครื่องตรง ๆ:
+      # WEDSYNC_IMPORT_DIR: /app/data/inbox
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ดาวน์โหลดโมเดล face recognition ลง volume ครั้งเดียว (ไม่ auto-run)
+  models:
+    image: camerasync:latest
+    build: .
+    profiles: ["tools"]
+    restart: "no"
+    command: ["wedsync-server", "fetch-models"]
+    volumes:
+      - ./data:/app/data
+
+  # tunnel relay — รันบน VPS เพื่อให้เครื่องช่างภาพ (หลัง NAT) โดนเข้าถึงได้
+  relay:
+    image: camerasync:latest
+    build: .
+    profiles: ["relay"]
+    restart: unless-stopped
+    command: ["wedsync-server", "relay", "--port", "9000"]
+    ports:
+      - "9000:9000"

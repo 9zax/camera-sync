@@ -1,0 +1,17 @@
+[Unit]
+Description=CameraSync server (wedding photo drive — own disk, always on)
+After=network.target
+
+[Service]
+Type=simple
+# แก้ path ให้ตรงเครื่องจริง
+ExecStart=/opt/camerasync/wedsync-server serve --port 8080 --import-dir /srv/weddings/inbox
+Environment=WEDSYNC_DATA=/opt/camerasync/data
+Environment=WEB_DIST=/opt/camerasync/web/dist
+Restart=always
+RestartSec=3
+User=camerasync
+Group=camerasync
+
+[Install]
+WantedBy=multi-user.target
