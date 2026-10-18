@@ -6,3 +6,4 @@ data
 hub-data
 *.zip
 .DS_Store
+*.linux-arm64

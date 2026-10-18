@@ -45,8 +45,9 @@ base64 = "0.22"
 # LINE Login (hub side token exchange)
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
-# face recognition (InsightFace SCRFD + ArcFace via ONNX)
-ort = { version = "=2.0.0-rc.10", features = ["download-binaries"] }
+# face recognition (InsightFace SCRFD + ArcFace via ONNX) — optional so the
+# hub (which never touches photos) can build without the C++ onnxruntime lib
+ort = { version = "=2.0.0-rc.10", features = ["download-binaries"], optional = true }
 
 # model downloader
 ureq = "2"
@@ -56,3 +57,7 @@ indicatif = "0.17"
 # zip download endpoint
 async_zip = { version = "0.0.17", features = ["tokio", "deflate"] }
 tokio-util = { version = "0.7", features = ["io"] }
+
+[features]
+default = ["face"]
+face = ["dep:ort"]

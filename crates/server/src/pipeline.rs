@@ -101,19 +101,23 @@ async fn next_job(st: &SharedState) -> Result<Option<String>> {
         return Ok(Some(id));
     }
     // Face indexing only when the engine is actually loaded (avoid busy loop while loading).
-    let engine_ready = matches!(st.face_engine.get(), Some(EngineState::Ready(_)));
-    if engine_ready {
-        if let Some((id,)) = sqlx::query_as::<_, (String,)>(
-            "SELECT p.id FROM photos p JOIN events e ON e.id = p.event_id \
-             WHERE p.status='ready' AND p.face_status='queued' AND e.face_enabled=1 \
-             ORDER BY p.created_at ASC LIMIT 1",
-        )
-        .fetch_optional(&st.pool)
-        .await?
-        {
-            return Ok(Some(id));
+    #[cfg(feature = "face")]
+    {
+        let engine_ready = matches!(st.face_engine.get(), Some(EngineState::Ready(_)));
+        if engine_ready {
+            if let Some((id,)) = sqlx::query_as::<_, (String,)>(
+                "SELECT p.id FROM photos p JOIN events e ON e.id = p.event_id \
+                 WHERE p.status='ready' AND p.face_status='queued' AND e.face_enabled=1 \
+                 ORDER BY p.created_at ASC LIMIT 1",
+            )
+            .fetch_optional(&st.pool)
+            .await?
+            {
+                return Ok(Some(id));
+            }
         }
     }
+    let _ = EngineState::Loading; // keep import meaningful in face-less builds
     Ok(None)
 }
 
@@ -203,23 +207,36 @@ pub async fn process_photo(st: &SharedState, id: &str) -> Result<()> {
     if row.face_status != "queued" {
         return Ok(());
     }
-    let engine = match st.face_engine.get() {
-        Some(EngineState::Ready(e)) => e.clone(),
-        _ => {
-            // engine not loaded (yet) — leave queued; will be swept when engine resolves
+
+    // face-less build (hub-only): nothing to index — tail expression for this build
+    #[cfg(not(feature = "face"))]
+    {
+        sqlx::query("UPDATE photos SET face_status='unavailable' WHERE id=?1 AND face_status='queued'")
+            .bind(id)
+            .execute(&st.pool)
+            .await?;
+        Ok(())
+    }
+
+    #[cfg(feature = "face")]
+    {
+        let engine = match st.face_engine.get() {
+            Some(EngineState::Ready(e)) => e.clone(),
+            _ => {
+                // engine not loaded (yet) — leave queued; will be swept when engine resolves
+                return Ok(());
+            }
+        };
+
+        let claimed = sqlx::query("UPDATE photos SET face_status='processing' WHERE id=?1 AND face_status='queued'")
+            .bind(id)
+            .execute(&st.pool)
+            .await?
+            .rows_affected()
+            == 1;
+        if !claimed {
             return Ok(());
         }
-    };
-
-    let claimed = sqlx::query("UPDATE photos SET face_status='processing' WHERE id=?1 AND face_status='queued'")
-        .bind(id)
-        .execute(&st.pool)
-        .await?
-        .rows_affected()
-        == 1;
-    if !claimed {
-        return Ok(());
-    }
 
     // Need a web-sized image to work from (fast + light on RAM for big files).
     let web = match web_img.take() {
@@ -265,6 +282,7 @@ pub async fn process_photo(st: &SharedState, id: &str) -> Result<()> {
     tx.commit().await?;
     tracing::info!("face index: photo {id} → {} faces", face_rows.len());
     Ok(())
+    } // cfg(feature = "face")
 }
 
 fn decode_with_exif(bytes: Vec<u8>) -> Result<(DynamicImage, u8, Option<i64>)> {

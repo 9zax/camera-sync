@@ -39,9 +39,10 @@ pub async fn run_server(
     });
 
     // Face models are heavy (~200 MB) — load in the background so the API starts instantly.
-    {
+    #[cfg(feature = "face")]
+    tokio::spawn({
         let st = state.clone();
-        tokio::spawn(async move {
+        async move {
             let dir = st.cfg.models_dir();
             let dir_display = dir.display().to_string();
             let res = tokio::task::spawn_blocking(move || faces::FaceEngine::load(&dir))
@@ -81,8 +82,24 @@ pub async fn run_server(
                 }
             }
             st.queue.notify();
-        });
-    }
+        }
+    });
+
+    // face-less build (hub-only): mark everything unavailable immediately
+    #[cfg(not(feature = "face"))]
+    tokio::spawn({
+        let st = state.clone();
+        async move {
+            let _ = st.face_engine.set(faces::EngineState::Unavailable);
+            let _ = sqlx::query(
+                "UPDATE photos SET face_status='unavailable' WHERE face_status='queued' \
+                 AND event_id IN (SELECT id FROM events WHERE face_enabled=1)",
+            )
+            .execute(&st.pool)
+            .await;
+            st.queue.notify();
+        }
+    });
 
     pipeline::start(state.clone());
 
@@ -188,9 +205,13 @@ async fn shutdown_signal() {
 }
 
 async fn get_meta(State(st): State<SharedState>) -> axum::Json<serde_json::Value> {
+    #[cfg(feature = "face")]
+    let face_ready = matches!(st.face_engine.get(), Some(faces::EngineState::Ready(_)));
+    #[cfg(not(feature = "face"))]
+    let face_ready = false;
     axum::Json(serde_json::json!({
         "version": env!("CARGO_PKG_VERSION"),
-        "face_ready": matches!(st.face_engine.get(), Some(faces::EngineState::Ready(_))),
+        "face_ready": face_ready,
     }))
 }
 

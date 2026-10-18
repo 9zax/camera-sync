@@ -15,7 +15,15 @@ use crate::util::{keyed_hash, pin_cookie_name};
 use crate::SharedState;
 
 fn face_ready(st: &SharedState) -> bool {
-    matches!(st.face_engine.get(), Some(EngineState::Ready(_)))
+    #[cfg(feature = "face")]
+    {
+        matches!(st.face_engine.get(), Some(EngineState::Ready(_)))
+    }
+    #[cfg(not(feature = "face"))]
+    {
+        let _ = st;
+        false
+    }
 }
 
 async fn event_or_404(st: &SharedState, slug: &str) -> Result<Event, AppError> {
@@ -147,6 +155,7 @@ const SELFIE_MAX_BYTES: usize = 30 * 1024 * 1024;
 
 /// Guest face search: send a selfie, get matching photos of the event back.
 /// The selfie is processed in memory and never stored.
+#[cfg(feature = "face")]
 pub async fn face_search(
     State(st): State<SharedState>,
     Path(slug): Path<String>,
@@ -309,4 +318,20 @@ pub async fn face_download_zip(
         return Err(AppError::not_found("no valid photos to download"));
     }
     Ok(zip_stream(entries, "my-photos.zip").await)
+}
+
+/// face-less build (hub-only binary): the search runs on the photographer's
+/// machine and is reached through the hub tunnel.
+#[cfg(not(feature = "face"))]
+pub async fn face_search(
+    State(_st): State<SharedState>,
+    Path(slug): Path<String>,
+    headers: HeaderMap,
+    _multipart: Multipart,
+) -> ApiResult<Json<serde_json::Value>> {
+    let ev = event_or_404(&_st, &slug).await?;
+    require_pin(&_st, &ev, &headers).await?;
+    Err(AppError::ServiceUnavailable(
+        "hub build นี้ไม่ได้เปิด face search — ใช้ได้บนเครื่องช่างภาพ (ผ่าน tunnel)".into(),
+    ))
 }

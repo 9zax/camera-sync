@@ -6,7 +6,9 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use image::{DynamicImage, GenericImageView, RgbImage};
+#[cfg(feature = "face")]
 use ort::session::{builder::GraphOptimizationLevel, Session};
+#[cfg(feature = "face")]
 use ort::value::Tensor;
 
 pub const DET_SIZE: u32 = 640;
@@ -23,10 +25,12 @@ const ARC_DST: [[f64; 2]; 5] = [
 
 pub enum EngineState {
     Loading,
+    #[cfg(feature = "face")]
     Ready(std::sync::Arc<FaceEngine>),
     Unavailable,
 }
 
+#[cfg(feature = "face")]
 pub struct FaceEngine {
     det: std::sync::Mutex<Session>,
     rec: std::sync::Mutex<Session>,
@@ -49,6 +53,7 @@ impl FaceDet {
     }
 }
 
+#[cfg(feature = "face")]
 impl FaceEngine {
     /// Returns Ok(None) when the model files are not present (face search disabled).
     pub fn load(models_dir: &Path) -> Result<Option<FaceEngine>> {

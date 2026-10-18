@@ -30,5 +30,5 @@ indicatif = "0.17"
 dirs = "5"
 uuid.workspace = true
 futures-util = "0.3"
-tokio-tungstenite = "0.23"
+tokio-tungstenite = { version = "0.23", features = ["rustls-tls-webpki-roots"] }
 base64 = "0.22"
