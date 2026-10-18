@@ -61,7 +61,8 @@ pub fn fetch_models(dir: &Path) -> Result<()> {
 
 fn download(url: &str, dest: &Path) -> Result<u64> {
     let resp = ureq::get(url)
-        .timeout(std::time::Duration::from_secs(120))
+        // covers slow links for the ~280 MB archive
+        .timeout(std::time::Duration::from_secs(600))
         .call()
         .context("HTTP request failed")?;
     let len: u64 = resp

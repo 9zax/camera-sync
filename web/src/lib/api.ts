@@ -77,6 +77,7 @@ export interface AdminEvent {
   event_date: string
   pin: string
   face_enabled: number
+  enabled: number
   upload_token: string
   created_at: number
   total: number

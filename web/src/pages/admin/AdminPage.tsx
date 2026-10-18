@@ -8,6 +8,7 @@ import {
   Loader2,
   LogOut,
   Plus,
+  QrCode,
   ScanFace,
   Sparkles,
 } from "lucide-react"
@@ -243,21 +244,42 @@ function EventsView({ username }: { username: string }) {
 }
 
 function EventCard({ event, index = 0 }: { event: AdminEvent; index?: number }) {
+  const qc = useQueryClient()
   const photosQuery = useQuery({
     queryKey: ["event-cover", event.id],
     queryFn: () => api.get<PhotoList>(`/api/events/${event.id}/photos?status=ready&limit=1`),
   })
+  const [qrOpen, setQrOpen] = useState(false)
+  const toggle = useMutation({
+    mutationFn: () => api.post(`/api/events/${event.id}/enabled`, { enabled: event.enabled === 0 }),
+    onSuccess: () => {
+      toast.success(event.enabled === 0 ? "เปิดใช้งานลิงก์แล้ว" : "พักลิงก์แล้ว — แขกจะเห็นว่าปิดชั่วคราว")
+      void qc.invalidateQueries({ queryKey: ["events"] })
+    },
+    onError: (e) => toast.error(String(e)),
+  })
+  const remove = useMutation({
+    mutationFn: () => api.del(`/api/events/${event.id}`),
+    onSuccess: () => {
+      toast.success("ลบงานเรียบร้อย")
+      void qc.invalidateQueries({ queryKey: ["events"] })
+    },
+    onError: (e) => toast.error(String(e)),
+  })
   const cover = photosQuery.data?.items?.[0]
   const couple = [event.partner_a, event.partner_b].filter(Boolean).join(" ♥ ")
+  const offline = event.enabled === 0
+  const qrSrc = `/api/events/${event.id}/qr.png?base=${encodeURIComponent(window.location.origin)}`
   return (
     <motion.div
       initial={{ opacity: 0, y: 26 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: 1, y: 0, scale: offline ? 0.97 : 1 }}
       transition={{ duration: 0.5, delay: index * 0.07, ease: [0.16, 1, 0.3, 1] }}
       whileHover={{ y: -5 }}
+      className={offline ? "opacity-70" : undefined}
     >
-      <Link to={`/admin/events/${event.id}`} className="group block h-full">
-        <Card className="h-full overflow-hidden transition-shadow group-hover:shadow-lg">
+      <Card className="h-full overflow-hidden transition-shadow hover:shadow-lg">
+        <Link to={`/admin/events/${event.id}`} className="group block">
           <div className="relative h-40 overflow-hidden bg-gradient-to-br from-secondary to-muted">
             {cover ? (
               <motion.img
@@ -284,6 +306,15 @@ function EventCard({ event, index = 0 }: { event: AdminEvent; index?: number }) 
                 </motion.span>
               )}
             </AnimatePresence>
+            {offline && (
+              <motion.span
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="absolute left-2 top-2 rounded-full bg-amber-600/90 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur"
+              >
+                ออฟไลน์ — พักลิงก์ชั่วคราว
+              </motion.span>
+            )}
           </div>
           <CardContent className="pt-4">
             <h3 className="truncate font-display text-lg font-semibold group-hover:text-primary">{event.title}</h3>
@@ -304,8 +335,55 @@ function EventCard({ event, index = 0 }: { event: AdminEvent; index?: number }) 
               )}
             </div>
           </CardContent>
-        </Card>
-      </Link>
+        </Link>
+        <div className="flex items-center gap-1.5 px-5 pb-4 pt-1">
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={() => setQrOpen(true)}>
+            <QrCode className="size-3.5" /> QR
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 px-2.5 text-xs"
+            disabled={toggle.isPending}
+            onClick={() => toggle.mutate()}
+          >
+            {offline ? "เปิดใช้งานลิงก์" : "พักลิงก์"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto h-7 gap-1 px-2.5 text-xs text-destructive hover:text-destructive"
+            disabled={remove.isPending}
+            onClick={() => {
+              if (confirm(`ลบงาน "${event.title}" ? ลิงก์แขกจะใช้ไม่ได้ทันที`)) remove.mutate()
+            }}
+          >
+            ลบ
+          </Button>
+        </div>
+      </Card>
+
+      <Dialog open={qrOpen} onOpenChange={setQrOpen}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle>QR — {event.title}</DialogTitle>
+            <DialogDescription className="break-all font-mono text-[11px]">
+              {window.location.origin}/e/{event.slug}
+            </DialogDescription>
+          </DialogHeader>
+          <motion.img
+            src={qrSrc}
+            alt="QR"
+            className="mx-auto w-56 rounded-xl border border-border"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 24 }}
+          />
+          <a href={qrSrc} download={`CameraSync-${event.slug}-qr.png`}>
+            <Button className="w-full">ดาวน์โหลด QR</Button>
+          </a>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   )
 }

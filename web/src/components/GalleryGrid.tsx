@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { motion, type Variants } from "motion/react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { photoUrl, type PhotoItem } from "@/lib/api"
@@ -7,7 +8,14 @@ export function GallerySkeleton({ count = 12 }: { count?: number }) {
   return (
     <div className="masonry-3">
       {Array.from({ length: count }).map((_, i) => (
-        <Skeleton key={i} className="w-full rounded-xl" style={{ height: heights[i % heights.length] }} />
+        <motion.div
+          key={i}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: i * 0.04 }}
+        >
+          <Skeleton className="w-full rounded-xl" style={{ height: heights[i % heights.length] }} />
+        </motion.div>
       ))}
     </div>
   )
@@ -37,6 +45,8 @@ export function PhotoTile({
   onClick: () => void
   badge?: React.ReactNode
 }) {
+  // blur-up: shimmer + heavy blur until the bytes are in, then spring to crisp
+  const [loaded, setLoaded] = useState(false)
   return (
     <motion.button
       layout
@@ -46,12 +56,32 @@ export function PhotoTile({
       whileTap={{ scale: 0.985 }}
       transition={{ type: "spring", stiffness: 320, damping: 24 }}
     >
-      <img
+      {!loaded && (
+        <motion.div
+          className="absolute inset-0 origin-top animate-shimmer rounded-xl bg-gradient-to-b from-muted via-secondary to-muted bg-[length:100%_200%]"
+          exit={{ opacity: 0 }}
+        />
+      )}
+      <motion.img
+        layoutId={`photo-${photo.id}`}
         src={photoUrl(photo.id, "thumb")}
         alt={photo.filename}
         loading="lazy"
+        onLoad={() => setLoaded(true)}
+        initial={{ opacity: 0, scale: 1.08, filter: "blur(16px)" }}
+        animate={
+          loaded
+            ? { opacity: 1, scale: 1, filter: "blur(0px)" }
+            : { opacity: 0, scale: 1.08, filter: "blur(16px)" }
+        }
+        transition={{ type: "spring", stiffness: 130, damping: 22, opacity: { duration: 0.45 } }}
         className="w-full"
         style={{ aspectRatio: photo.width && photo.height ? `${photo.width} / ${photo.height}` : "4 / 5" }}
+      />
+      {/* Ken Burns drift on hover — pure transform, GPU cheap */}
+      <motion.div
+        className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        aria-hidden
       />
       {badge}
     </motion.button>

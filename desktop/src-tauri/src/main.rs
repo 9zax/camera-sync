@@ -39,8 +39,10 @@ struct App {
 
 #[derive(Serialize)]
 struct EventLink {
+    id: String,
     slug: String,
     title: String,
+    enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -54,6 +56,7 @@ struct Status {
     guest_base: String,
     local_admin: Option<(String, String)>,
     import_dir: String,
+    face_state: String, // ready | loading | unavailable
 }
 
 impl App {
@@ -82,13 +85,19 @@ async fn collect_events() -> Vec<EventLink> {
     let Some(st) = wedsync_server::server_state() else {
         return vec![];
     };
-    let rows: Vec<(String, String)> =
-        sqlx::query_as("SELECT slug, title FROM events ORDER BY created_at DESC")
-            .fetch_all(&st.pool)
-            .await
-            .unwrap_or_default();
+    let rows: Vec<(String, String, String, i64)> = sqlx::query_as(
+        "SELECT id, slug, title, COALESCE(enabled, 1) FROM events ORDER BY created_at DESC",
+    )
+    .fetch_all(&st.pool)
+    .await
+    .unwrap_or_default();
     rows.into_iter()
-        .map(|(slug, title)| EventLink { slug, title })
+        .map(|(id, slug, title, enabled)| EventLink {
+            id,
+            slug,
+            title,
+            enabled: enabled != 0,
+        })
         .collect()
 }
 
@@ -115,6 +124,15 @@ async fn get_status(app: State<'_, App>) -> Result<Status, String> {
     let line_user = app.line_user.read().unwrap().clone();
     let events = collect_events().await;
     let admin = read_local_admin();
+    let face_state = match wedsync_server::server_state() {
+        Some(st) => match st.face_engine.get() {
+            Some(wedsync_server::faces::EngineState::Ready(_)) => "ready",
+            Some(wedsync_server::faces::EngineState::Unavailable) => "unavailable",
+            _ => "loading",
+        },
+        None => "loading",
+    }
+    .to_string();
     Ok(Status {
         server_running: port.is_some(),
         port,
@@ -125,6 +143,7 @@ async fn get_status(app: State<'_, App>) -> Result<Status, String> {
         guest_base: guest_base(&hub),
         local_admin: admin,
         import_dir: default_import_dir().display().to_string(),
+        face_state,
     })
 }
 
@@ -207,6 +226,84 @@ fn open_in_browser(app: AppHandle, url: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+fn server_state_or_err() -> Result<wedsync_server::SharedState, String> {
+    wedsync_server::server_state().ok_or_else(|| "เซิร์ฟเวอร์ยังไม่พร้อม ลองอีกครั้งในสักครู่".into())
+}
+
+#[tauri::command]
+async fn delete_event(id: String) -> Result<(), String> {
+    let st = server_state_or_err()?;
+    wedsync_server::events::delete_event(&st, &id)
+        .await
+        .map_err(|e| format!("ลบงานไม่สำเร็จ: {e:?}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_event_enabled(id: String, enabled: bool) -> Result<(), String> {
+    let st = server_state_or_err()?;
+    wedsync_server::events::set_event_enabled(&st, &id, enabled)
+        .await
+        .map_err(|e| format!("เปลี่ยนสถานะไม่สำเร็จ: {e:?}"))?;
+    Ok(())
+}
+
+fn guest_url(hub: &str, slug: &str) -> String {
+    format!("{}/e/{}", guest_base(hub), slug)
+}
+
+/// QR PNG (720px) for a guest link — base64 so the webview can show it
+/// directly as a data URL and we can reuse the bytes for "save".
+fn qr_png_bytes(url: &str) -> Result<Vec<u8>, String> {
+    let code = qrcode::QrCode::with_error_correction_level(url.as_bytes(), qrcode::EcLevel::M)
+        .map_err(|e| format!("สร้าง QR ไม่สำเร็จ: {e}"))?;
+    let img = code
+        .render::<image::Rgba<u8>>()
+        .min_dimensions(720, 720)
+        .quiet_zone(true)
+        .dark_color(image::Rgba([28, 22, 18, 255]))
+        .light_color(image::Rgba([255, 252, 246, 255]))
+        .build();
+    let mut buf = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(img)
+        .write_to(&mut buf, image::ImageFormat::Png)
+        .map_err(|e| format!("เข้ารหัส PNG ไม่สำเร็จ: {e}"))?;
+    Ok(buf.into_inner())
+}
+
+#[tauri::command]
+fn guest_qr(app: State<'_, App>, slug: String) -> Result<String, String> {
+    let url = guest_url(&app.hub(), &slug);
+    let bytes = qr_png_bytes(&url)?;
+    use base64::Engine;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
+#[tauri::command]
+async fn save_qr(app: AppHandle, state: State<'_, App>, slug: String) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let default_name = format!("CameraSync-{slug}-qr.png");
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_file_name(&default_name)
+        .add_filter("PNG image", &["png"])
+        .save_file(move |file| {
+            let _ = tx.send(file.map(|p| p.to_string()));
+        });
+    let Some(path): Option<String> = rx.await.map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    let url = guest_url(&state.hub(), &slug);
+    let bytes = qr_png_bytes(&url)?;
+    let saved = path.clone();
+    tokio::task::spawn_blocking(move || std::fs::write(&saved, bytes))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("บันทึกไฟล์ไม่สำเร็จ: {e}"))?;
+    Ok(Some(path))
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -246,6 +343,10 @@ fn main() {
             line_connect,
             add_photo_folder,
             open_in_browser,
+            delete_event,
+            set_event_enabled,
+            guest_qr,
+            save_qr,
         ])
         .run(tauri::generate_context!())
         .expect("error while running CameraSync desktop");

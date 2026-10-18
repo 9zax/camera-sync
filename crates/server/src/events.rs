@@ -22,6 +22,7 @@ pub struct Event {
     pub face_enabled: i64,
     pub upload_token: String,
     pub created_at: i64,
+    pub enabled: i64,
 }
 
 #[derive(sqlx::FromRow, serde::Serialize)]
@@ -36,7 +37,7 @@ pub struct EventWithCounts {
 }
 
 const EVENT_COLUMNS: &str =
-    "e.id, e.slug, e.title, e.partner_a, e.partner_b, e.event_date, e.pin, e.face_enabled, e.upload_token, e.created_at";
+    "e.id, e.slug, e.title, e.partner_a, e.partner_b, e.event_date, e.pin, e.face_enabled, e.upload_token, e.created_at, e.enabled";
 const EVENT_COUNTS: &str = "\
  (SELECT COUNT(*) FROM photos p WHERE p.event_id = e.id) AS total, \
  (SELECT COUNT(*) FROM photos p WHERE p.event_id = e.id AND p.status = 'ready') AS ready, \
@@ -301,15 +302,23 @@ pub async fn delete(
     _user: AuthUser,
     Path(id): Path<String>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let ev = fetch_event(&st, &id).await?;
+    let deleted = delete_event(&st, &id).await?;
+    Ok(Json(json!({ "deleted": deleted })))
+}
+
+/// Core delete — shared by the admin route and the desktop app.
+/// Removes DB rows + derived files that no other event references;
+/// the photographer's own source folder is never touched.
+pub async fn delete_event(st: &SharedState, id: &str) -> Result<String, AppError> {
+    let ev = fetch_event(st, id).await?;
     let photos: Vec<(String, String)> =
         sqlx::query_as("SELECT orig_hash, ext FROM photos WHERE event_id = ?1")
-            .bind(&id)
+            .bind(id)
             .fetch_all(&st.pool)
             .await
             .map_err(AppError::from)?;
     sqlx::query("DELETE FROM events WHERE id = ?1")
-        .bind(&id)
+        .bind(id)
         .execute(&st.pool)
         .await
         .map_err(AppError::from)?;
@@ -326,7 +335,41 @@ pub async fn delete(
             let _ = tokio::fs::remove_file(st.cfg.thumb_path(&hash)).await;
         }
     }
-    Ok(Json(json!({ "deleted": ev.id })))
+    Ok(ev.id)
+}
+
+#[derive(Deserialize)]
+pub struct SetEnabledReq {
+    pub enabled: bool,
+}
+
+pub async fn set_enabled_route(
+    State(st): State<SharedState>,
+    _user: AuthUser,
+    Path(id): Path<String>,
+    Json(req): Json<SetEnabledReq>,
+) -> ApiResult<Json<EventWithCounts>> {
+    Ok(Json(set_event_enabled(&st, &id, req.enabled).await?))
+}
+
+/// Online/offline toggle — offline events answer guests with a friendly
+/// "ปิดใช้งานชั่วคราว" instead of serving photos. Shared by admin route and
+/// the desktop app.
+pub async fn set_event_enabled(
+    st: &SharedState,
+    id: &str,
+    enabled: bool,
+) -> Result<EventWithCounts, AppError> {
+    let res = sqlx::query("UPDATE events SET enabled = ?1 WHERE id = ?2")
+        .bind(enabled as i64)
+        .bind(id)
+        .execute(&st.pool)
+        .await
+        .map_err(AppError::from)?;
+    if res.rows_affected() == 0 {
+        return Err(AppError::not_found("event not found"));
+    }
+    Ok(fetch_with_counts(st, id).await?)
 }
 
 pub async fn regen_token(

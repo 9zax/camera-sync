@@ -113,16 +113,30 @@ pub async fn run_server(
         tracing::warn!("local admin provisioning failed: {e:#}");
     }
 
-    // Face models are heavy (~200 MB) — load in the background so the API starts instantly.
+    // Face models are heavy (~200 MB) — resolve in the background so the API
+    // starts instantly. Missing models are auto-downloaded once (the desktop
+    // app has no CLI step the photographer could run instead).
     #[cfg(feature = "face")]
     tokio::spawn({
         let st = state.clone();
         async move {
             let dir = st.cfg.models_dir();
             let dir_display = dir.display().to_string();
-            let res = tokio::task::spawn_blocking(move || faces::FaceEngine::load(&dir))
-                .await
-                .unwrap_or_else(|e| Err(anyhow::anyhow!("join error: {e}")));
+            let res = tokio::task::spawn_blocking({
+                let dir = dir.clone();
+                move || -> anyhow::Result<Option<faces::FaceEngine>> {
+                    match faces::FaceEngine::load(&dir)? {
+                        Some(engine) => Ok(Some(engine)),
+                        None => {
+                            tracing::info!("face models missing — downloading once (~280 MB)…");
+                            crate::models_fetch::fetch_models(&dir)?;
+                            faces::FaceEngine::load(&dir)
+                        }
+                    }
+                }
+            })
+            .await
+            .unwrap_or_else(|e| Err(anyhow::anyhow!("join error: {e}")));
             match res {
                 Ok(Some(engine)) => {
                     tracing::info!("face engine ready — selfie search enabled");
@@ -217,6 +231,7 @@ async fn serve_http(state: SharedState, port: u16) -> anyhow::Result<()> {
             get(events::get_one).patch(events::update).delete(events::delete),
         )
         .route("/api/events/{id}/token", post(events::regen_token))
+        .route("/api/events/{id}/enabled", post(events::set_enabled_route))
         .route("/api/events/{id}/qr.png", get(events::qr_png))
         .route("/api/events/{id}/photos", get(photos::list_admin).post(photos::upload))
         .route("/api/events/{id}/download.zip", get(photos::download_zip))

@@ -60,17 +60,40 @@
       .err { color: #b3261e; font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
 
       .link-row {
-        display: flex; align-items: center; gap: 8px; padding: 9px 0;
+        display: flex; flex-direction: column; gap: 7px; padding: 11px 0;
         border-top: 1px solid var(--border);
       }
       .link-row:first-of-type { border-top: none; }
-      .link-row .t { flex: 1; min-width: 0; }
-      .link-row .t b { display: block; font-size: 13px; }
-      .link-row .t span {
-        display: block; font-family: ui-monospace, monospace; font-size: 11px;
-        color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      .link-row .top { display: flex; align-items: center; gap: 8px; }
+      .link-row .top b { font-size: 13.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .badge {
+        font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 3px 9px; flex-shrink: 0;
       }
-      .link-row button { padding: 7px 11px; font-size: 12px; border-radius: 9px; }
+      .badge.on { background: rgba(15,157,88,.12); color: var(--ok); }
+      .badge.off { background: #f0e0d0; color: #9a5b2d; }
+      .link-row .url {
+        font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .link-row .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+      .link-row .acts button { padding: 6px 10px; font-size: 11.5px; border-radius: 8px; font-weight: 600; }
+      .link-row .acts .danger { background: #fbe9e7; color: #b3261e; }
+
+      .modal-bg {
+        position: fixed; inset: 0; background: rgba(42,36,32,.45);
+        display: none; align-items: center; justify-content: center; z-index: 50;
+      }
+      .modal-bg.show { display: flex; }
+      .modal {
+        background: var(--card); border-radius: 18px; padding: 18px; width: 340px;
+        text-align: center; box-shadow: 0 18px 50px rgba(42,36,32,.25);
+      }
+      .modal h3 { font-size: 15px; margin-bottom: 2px; }
+      .modal .url { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); margin-bottom: 12px; word-break: break-all; }
+      .modal img { width: 250px; height: 250px; border-radius: 12px; border: 1px solid var(--border); display: block; margin: 0 auto 12px; background: #fff; }
+      .modal .row { display: flex; gap: 8px; }
+      .modal .row button { flex: 1; }
+      .modal .hint { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
 
       details.adv { margin-top: 4px; }
       details.adv summary {
@@ -119,8 +142,9 @@
     <div class="card">
       <h2>สถานะเครื่องนี้</h2>
       <p class="sub" id="srvSub">กำลังเริ่มเซิร์ฟเวอร์ในเครื่อง…</p>
-      <div class="status"><span class="dot warn" id="srvDot"></span><span id="srvText">กำลังเริ่ม…</span></div>
+      <div class="status"><span class="dot" id="srvDot"></span><span id="srvText">กำลังเริ่ม…</span></div>
       <div class="status"><span class="dot" id="hubDot"></span><span id="hubText">ยังไม่เชื่อมต่อ hub</span></div>
+      <div class="status"><span class="dot" id="faceDot"></span><span id="faceText">AI หารูปตัวเอง: กำลังเตรียม…</span></div>
     </div>
 
     <!-- one-click LINE login -->
@@ -140,7 +164,7 @@
     <!-- guest links (after connect) -->
     <div class="card" id="linksCard" style="display:none">
       <h2>ลิงก์สำหรับแขก</h2>
-      <p class="sub">ส่งลิงก์นี้ให้ทีมงาน เพื่อทำ QR ให้แขกสแกน หรือแปะไว้ที่หน้างาน</p>
+      <p class="sub">กด QR เพื่อโชว์/ดาวน์โหลด สแกนดูรูปได้เลย — พักลิงก์ได้ชั่วคราว หรือลบงานที่จบแล้ว</p>
       <div id="links"></div>
     </div>
 
@@ -172,6 +196,19 @@
 
     <div class="toast" id="toast"></div>
 
+    <div class="modal-bg" id="qrModal">
+      <div class="modal">
+        <h3 id="qrTitle">QR ลิงก์แขก</h3>
+        <div class="url" id="qrUrl"></div>
+        <img id="qrImg" alt="QR code" />
+        <div class="row">
+          <button class="secondary" id="qrClose">ปิด</button>
+          <button id="qrSave">ดาวน์โหลด QR</button>
+        </div>
+        <p class="hint">ปริ้นแปะที่โต๊ะแขก หรือหน้างาน — สแกนกล้องมือถือเปิดลิงก์ได้ทันที ไม่ต้องติดแอป</p>
+      </div>
+    </div>
+
     <script>
       const { invoke } = window.__TAURI__.core;
       const $ = (id) => document.getElementById(id);
@@ -198,6 +235,17 @@
           setSrv("ทำงานอยู่ (พอร์ต " + s.port + ")", "on");
           $("srvSub").textContent = "รูปทั้งหมดอยู่บนดิสก์เครื่องนี้ — ไม่มีการอัปโหลดไปเก็บที่อื่น";
         }
+        const face = $("faceDot"), faceT = $("faceText");
+        if (s.face_state === "ready") {
+          face.className = "dot on";
+          faceT.textContent = "AI หารูปตัวเอง: พร้อมใช้งาน ✓";
+        } else if (s.face_state === "unavailable") {
+          face.className = "dot warn";
+          faceT.textContent = "AI หารูปตัวเอง: ยังไม่พร้อม — ตรวจอินเทอร์เน็ตแล้วรีสตาร์ตแอป (โหลดโมเดลใหม่)";
+        } else {
+          face.className = "dot warn";
+          faceT.textContent = "AI หารูปตัวเอง: กำลังดาวน์โหลดโมเดลครั้งแรก (~280MB) — เปิดแอปทิ้งไว้ได้เลย";
+        }
         if (s.line_user || s.tunnel_status.includes("เชื่อมต่อแล้ว")) {
           connected = true;
           setHub(s.line_user ? "เชื่อมต่อแล้ว — LINE: " + s.line_user : s.tunnel_status, "on");
@@ -212,17 +260,56 @@
             const row = document.createElement("div");
             row.className = "link-row";
             row.innerHTML =
-              '<div class="t"><b></b><span></span></div>' +
-              '<button class="secondary" data-a="copy">คัดลอก</button>' +
-              '<button class="secondary" data-a="open">เปิด</button>';
+              '<div class="top"><b></b><span class="badge"></span></div>' +
+              '<div class="url"></div>' +
+              '<div class="acts">' +
+              '<button class="secondary" data-a="qr">QR</button>' +
+              '<button class="secondary" data-a="copy">คัดลอกลิงก์</button>' +
+              '<button class="secondary" data-a="open">เปิด</button>' +
+              '<button class="secondary" data-a="toggle"></button>' +
+              '<button class="secondary danger" data-a="del">ลบ</button>' +
+              "</div>";
             row.querySelector("b").textContent = ev.title || ev.slug;
-            row.querySelector("span").textContent = url;
+            row.querySelector(".url").textContent = url;
+            const badge = row.querySelector(".badge");
+            const tgl = row.querySelector('[data-a="toggle"]');
+            const paint = () => {
+              badge.className = "badge " + (ev.enabled ? "on" : "off");
+              badge.textContent = ev.enabled ? "● ออนไลน์" : "ออฟไลน์";
+              tgl.textContent = ev.enabled ? "พักลิงก์" : "ใช้งานลิงก์";
+            };
+            paint();
+            row.querySelector('[data-a="qr"]').onclick = () => showQr(ev, url);
             row.querySelector('[data-a="copy"]').onclick = async () => {
               await navigator.clipboard.writeText(url);
               toast("คัดลอกลิงก์แล้ว ✓");
             };
             row.querySelector('[data-a="open"]').onclick = () =>
               invoke("open_in_browser", { url });
+            tgl.onclick = async () => {
+              tgl.disabled = true;
+              try {
+                await invoke("set_event_enabled", { id: ev.id, enabled: !ev.enabled });
+                ev.enabled = !ev.enabled;
+                paint();
+                toast(ev.enabled ? "เปิดใช้งานลิงก์แล้ว ✓" : "พักลิงก์แล้ว — แขกจะเห็นว่าปิดชั่วคราว");
+                refresh();
+              } catch (e) {
+                toast(String(e));
+              } finally {
+                tgl.disabled = false;
+              }
+            };
+            row.querySelector('[data-a="del"]').onclick = async () => {
+              if (!confirm('ลบงาน "' + (ev.title || ev.slug) + '" ?\n\nลิงก์แขกจะใช้ไม่ได้ทันที และระบบจะลบไฟล์ที่สร้างไว้ใน ~/.camerasync\n(ไฟล์ต้นฉบับในโฟลเดอร์รูปของคุณไม่ถูกลบ)')) return;
+              try {
+                await invoke("delete_event", { id: ev.id });
+                toast("ลบงานเรียบร้อย ✓");
+                refresh();
+              } catch (e) {
+                toast(String(e));
+              }
+            };
             box.appendChild(row);
           }
         }
@@ -232,6 +319,29 @@
           : "—";
         $("importDir").textContent = s.import_dir;
         $("hubUrl").textContent = s.hub_url;
+      };
+
+      // ---- QR modal ----
+      let qrSlug = null;
+      const showQr = async (ev, url) => {
+        qrSlug = ev.slug;
+        $("qrTitle").textContent = "QR — " + (ev.title || ev.slug);
+        $("qrUrl").textContent = url;
+        $("qrImg").src = "data:image/png;base64," + (await invoke("guest_qr", { slug: ev.slug }));
+        $("qrModal").classList.add("show");
+      };
+      $("qrClose").onclick = () => $("qrModal").classList.remove("show");
+      $("qrModal").onclick = (e) => {
+        if (e.target === $("qrModal")) $("qrModal").classList.remove("show");
+      };
+      $("qrSave").onclick = async () => {
+        if (!qrSlug) return;
+        try {
+          const path = await invoke("save_qr", { slug: qrSlug });
+          if (path) toast("บันทึก QR แล้ว ✓");
+        } catch (e) {
+          toast(String(e));
+        }
       };
 
       // initial + periodic refresh (cheap local DB query)

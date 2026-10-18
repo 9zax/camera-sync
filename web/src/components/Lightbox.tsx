@@ -141,6 +141,7 @@ export function Lightbox({
         <AnimatePresence custom={direction} mode="popLayout" initial={false}>
           <motion.img
             key={photo.id}
+            layoutId={`photo-${photo.id}`}
             src={photoUrl(photo.id, "web")}
             alt={photo.filename}
             custom={direction}

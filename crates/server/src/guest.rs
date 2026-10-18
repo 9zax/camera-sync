@@ -27,7 +27,14 @@ fn face_ready(st: &SharedState) -> bool {
 }
 
 async fn event_or_404(st: &SharedState, slug: &str) -> Result<Event, AppError> {
-    events::fetch_event_by_slug(st, slug).await
+    let ev = events::fetch_event_by_slug(st, slug).await?;
+    if ev.enabled == 0 {
+        // offline toggle (desktop/admin) — guests get a clear message, not a 404
+        return Err(AppError::ServiceUnavailable(
+            "แกลเลอรีนี้ปิดใช้งานชั่วคราว — ลองมาใหม่ภายหลังนะ".into(),
+        ));
+    }
+    Ok(ev)
 }
 
 async fn require_pin(st: &SharedState, ev: &Event, headers: &HeaderMap) -> Result<(), AppError> {

@@ -114,31 +114,39 @@ export default function GuestEvent() {
   return (
     <div className="min-h-dvh pb-16">
       {/* header */}
-      <header className="border-b border-border/60 bg-gradient-to-b from-secondary/70 to-background">
+      <header className="relative overflow-hidden border-b border-border/60 bg-gradient-to-b from-secondary/70 to-background">
+        <div
+          className="pointer-events-none absolute inset-0 [background-image:radial-gradient(42%_60%_at_50%_0%,oklch(0.52_0.082_25/0.07),transparent),radial-gradient(22%_30%_at_88%_12%,oklch(0.78_0.09_85/0.10),transparent)]"
+          aria-hidden
+        />
+        <Heart
+          className="pointer-events-none absolute -right-6 top-8 size-44 rotate-12 text-primary/[0.05]"
+          aria-hidden
+        />
         <motion.div
-          className="mx-auto max-w-6xl px-5 pb-8 pt-12 text-center"
+          className="relative mx-auto max-w-6xl px-5 pb-8 pt-12 text-center"
           variants={stagger}
           initial="hidden"
           animate="show"
         >
-          <motion.p variants={riseIn} className="mb-3 text-[11px] font-medium uppercase tracking-[0.25em] text-muted-foreground">
-            Wedding Gallery
+          <motion.p variants={riseIn} className="mb-3 inline-flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-gold">
+            <span className="h-px w-7 bg-gold/60" /> Wedding Gallery <span className="h-px w-7 bg-gold/60" />
           </motion.p>
-          <motion.h1 variants={riseIn} className="font-display text-3xl font-semibold tracking-tight sm:text-5xl">
+          <motion.h1 variants={riseIn} className="font-display text-4xl font-semibold tracking-tight sm:text-[3.4rem] sm:leading-[1.1]">
             {info.title}
           </motion.h1>
           {couple && (
-            <motion.p variants={riseIn} className="mt-3 font-display text-lg text-primary">
+            <motion.p variants={riseIn} className="mt-3 font-display text-xl italic text-primary sm:text-2xl">
               {couple}
             </motion.p>
           )}
           {info.event_date && (
-            <motion.p variants={riseIn} className="mt-2 flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
-              <CalendarDays className="size-4" /> {formatEventDate(info.event_date)}
+            <motion.p variants={riseIn} className="mt-3 flex items-center justify-center gap-1.5 text-[13px] text-muted-foreground">
+              <CalendarDays className="size-4 text-gold" /> {formatEventDate(info.event_date)}
             </motion.p>
           )}
           <motion.div variants={riseIn} className="mt-5 flex flex-wrap items-center justify-center gap-2.5 text-sm">
-            <span className="flex items-center gap-1.5 rounded-full bg-card px-3.5 py-1.5 shadow-sm">
+            <span className="flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3.5 py-1.5 shadow-sm">
               <Images className="size-4 text-primary" />
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.span
@@ -177,11 +185,11 @@ export default function GuestEvent() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25, duration: 0.4 }}
           >
-            <TabsList className="mx-auto mb-8 grid w-full max-w-md grid-cols-2 rounded-full p-1">
-              <TabsTrigger value="gallery" className="rounded-full">
+            <TabsList className="mx-auto mb-8 grid w-full max-w-md grid-cols-2 rounded-full border border-border/70 bg-secondary/60 p-1 shadow-sm">
+              <TabsTrigger value="gallery" className="rounded-full py-2.5 font-medium data-[state=active]:shadow-[0_8px_20px_-8px_oklch(0.52_0.082_25/0.55)]">
                 <Images className="mr-2 size-4" /> แกลเลอรี
               </TabsTrigger>
-              <TabsTrigger value="me" className="rounded-full" disabled={!info.face_enabled}>
+              <TabsTrigger value="me" className="rounded-full py-2.5 font-medium data-[state=active]:shadow-[0_8px_20px_-8px_oklch(0.52_0.082_25/0.55)]" disabled={!info.face_enabled}>
                 <ScanFace className="mr-2 size-4" /> หารูปตัวเอง
               </TabsTrigger>
             </TabsList>
