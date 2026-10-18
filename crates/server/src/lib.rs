@@ -433,6 +433,7 @@ async fn spa_index(State(st): State<SharedState>) -> axum::response::Response {
     axum::response::Response::builder()
         .status(StatusCode::OK)
         .header("content-type", "text/html; charset=utf-8")
+        .header("cache-control", "no-store")
         .body(axum::body::Body::from(page))
         .expect("static response")
 }
@@ -450,6 +451,7 @@ async fn serve_favicon(State(st): State<SharedState>) -> axum::response::Respons
     axum::response::Response::builder()
         .status(StatusCode::OK)
         .header("content-type", "image/svg+xml")
+        .header("cache-control", "no-store")
         .body(axum::body::Body::from(bytes))
         .expect("static response")
 }
@@ -481,10 +483,24 @@ async fn serve_asset(State(st): State<SharedState>, Path(path): Path<String>) ->
     }
     let mime = mime_for(&path);
     if let Ok(bytes) = tokio::fs::read(st.cfg.web_dist.join("assets").join(&path)).await {
-        return ([(axum::http::header::CONTENT_TYPE, mime)], bytes).into_response();
+        return (
+            [
+                (axum::http::header::CONTENT_TYPE, mime),
+                (axum::http::header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            ],
+            bytes,
+        )
+            .into_response();
     }
     match WebAssets::get(&format!("assets/{path}")) {
-        Some(f) => ([(axum::http::header::CONTENT_TYPE, mime)], f.data.into_owned()).into_response(),
+        Some(f) => (
+            [
+                (axum::http::header::CONTENT_TYPE, mime),
+                (axum::http::header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            ],
+            f.data.into_owned(),
+        )
+            .into_response(),
         None => (StatusCode::NOT_FOUND, "not found").into_response(),
     }
 }
