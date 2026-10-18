@@ -78,14 +78,13 @@ docker compose --profile hub up -d hub      # hub ที่พอร์ต 9000
 ```
 
 **เปิด LINE Login** (ให้ช่างภาพล็อกอินด้วย LINE ผ่านปุ่มใน desktop app):
-1. สร้าง channel แบบ "LINE Login" ที่ [developers.line.biz](https://developers.line.biz) (ประเภท web app)
-2. ตั้ง Callback URL เป็น `https://<โดเมน>/r/line/callback`
-3. ใส่ค่า env ให้ hub:
-```yaml
-environment:
-  LINE_CHANNEL_ID: "16xxxxxxxx"
-  LINE_CHANNEL_SECRET: "xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  HUB_PUBLIC_URL: "https://sync.example.com"   # ใช้ตอนสร้างลิงก์ redirect
+
+ผ่านการใช้งานจริงแล้วที่ `https://sync.khunaistory.com` — ใช้ LINE Login channel id `2011670845` (provider "hanbill") พร้อม callback `https://sync.khunaistory.com/r/line/callback` ค่า env อยู่ที่ `/opt/camerasync/hub.env` บนเซิร์ฟเวอร์:
+
+```ini
+LINE_CHANNEL_ID=<channel id>
+LINE_CHANNEL_SECRET=<channel secret>
+HUB_PUBLIC_URL=https://sync.khunaistory.com
 ```
 
 flow: แอป desktop กด "เข้าสู่ระบบด้วย LINE" → เปิดเบราว์เซอร์ไป hub → ผู้ใช้ยืนยันใน LINE → hub ได้ LINE userId → ออก machine token ให้แอปอัตโนมัติ → tunnel ต่อทันที (ไม่ต้องจำ user/pass เลย) ถ้ายังไม่ตั้ง LINE env ระบบพร้อมใช้ด้วย user/password ได้เหมือนเดิม
