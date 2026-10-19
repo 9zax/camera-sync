@@ -543,11 +543,13 @@ fn main() {
                     }
                     let _ = tunnel_handle.emit("tunnel-status", "กำลังเชื่อมต่อ hub…");
                     start_tunnel_task(&tunnel_handle, hub, port, creds);
-                    // watchdog: if the saved token never connects (expired /
-                    // revoked), clear it so the login button comes back
+                    // status nudge only: a slow first connect (hub restarting,
+                    // flaky WiFi) must NEVER delete the saved session — the
+                    // tunnel keeps retrying on its own, and logging out is the
+                    // only thing that clears the session now.
                     let watch = tunnel_handle.clone();
                     rt().spawn(async move {
-                        tokio::time::sleep(std::time::Duration::from_secs(25)).await;
+                        tokio::time::sleep(std::time::Duration::from_secs(120)).await;
                         if let Some(state) = watch.try_state::<App>() {
                             let ok = state
                                 .tunnel_status
@@ -555,13 +557,11 @@ fn main() {
                                 .unwrap()
                                 .contains("เชื่อมต่อแล้ว");
                             if !ok {
-                                clear_machine_session();
-                                *state.line_user.write().unwrap() = String::new();
                                 *state.tunnel_status.write().unwrap() =
-                                    "บัญชี LINE ที่บันทึกไว้ใช้ไม่ได้แล้ว — ล็อกอินใหม่อีกครั้ง".into();
+                                    "ยังเชื่อมต่อ hub ไม่ได้ — ลองใหม่อยู่ (ข้อมูลการล็อกอินยังอยู่)".into();
                                 let _ = watch.emit(
                                     "tunnel-status",
-                                    "บัญชี LINE ที่บันทึกไว้ใช้ไม่ได้แล้ว — ล็อกอินใหม่อีกครั้ง",
+                                    "ยังเชื่อมต่อ hub ไม่ได้ — ลองใหม่อยู่ (ข้อมูลการล็อกอินยังอยู่)",
                                 );
                             }
                         }
