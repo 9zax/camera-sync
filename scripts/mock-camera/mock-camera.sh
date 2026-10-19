@@ -25,16 +25,18 @@ docker run --rm --pull=missing \
   -e HOST="$HOST" -e PORT="$PORT" -e FUSER="$USER" -e FPASS="$PASS" \
   -e ROUNDS="$ROUNDS" -e EVERY="$EVERY" \
   alpine:3.20 sh -eu -c '
-    apk add --no-cache curl >/dev/null 2>&1
+    apk add --no-cache lftp >/dev/null 2>&1
     i=0
     while [ "$i" -lt "$ROUNDS" ]; do
       for f in /photos/*.jpg; do
-        name="CAM_$(date +%H%M%S)_$(basename "$f")"
-        printf "  📷 ส่ง %s … " "$name"
-        curl -sS --ftp-skip-pasv-ip --connect-timeout 8 -T "$f" \
-          "ftp://$HOST:$PORT/$name" --user "$FUSER:$FPASS" && echo "OK"
+        name="CAM_r$((i+1))_$(date +%H%M%S)_$(basename "$f")"
+        printf "  📷 [lftp] STOR %s … " "$name"
+        # real FTP client: login → PASV → STOR, like a camera does
+        lftp -u "$FUSER","$FPASS" "$HOST:$PORT" \
+          -e "set ftp:passive-mode on; set ftp:nop-interval 5; put -O / "$f" -o "$name"; quit" \
+          >/dev/null 2>&1 && echo "OK (226)"
       done
       i=$((i+1)); [ "$i" -lt "$ROUNDS" ] && sleep "$EVERY"
     done
-    echo "◎ mock camera จบการทำงาน"
+    echo "◎ mock camera จบการทำงาน (FTP client: lftp)"
   '
