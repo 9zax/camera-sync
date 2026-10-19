@@ -1455,7 +1455,7 @@ fn public_origin(headers: &HeaderMap) -> String {
 /// Embed the album name + cover into the SPA shell so link previews (LINE,
 /// Facebook, iMessage …) show what the photographer named and chose, not a
 /// generic site card. Bots don't run JavaScript, so this must be server-side.
-fn inject_share_meta(html: String, title: &str, image_url: &str) -> String {
+fn inject_share_meta(html: String, title: &str, desc: &str, url: &str, image_url: &str) -> String {
     let esc = |s: &str| {
         s.replace('&', "&amp;")
             .replace('<', "&lt;")
@@ -1463,13 +1463,17 @@ fn inject_share_meta(html: String, title: &str, image_url: &str) -> String {
             .replace('"', "&quot;")
     };
     let title_esc = esc(title);
+    let desc_esc = esc(desc);
     let metas = format!(
         "<meta property=\"og:title\" content=\"{title_esc} — CameraSync\" />\
          <meta property=\"og:site_name\" content=\"CameraSync\" />\
          <meta property=\"og:type\" content=\"website\" />\
+         <meta property=\"og:url\" content=\"{url}\" />\
+         <meta property=\"og:description\" content=\"{desc_esc}\" />\
          <meta property=\"og:image\" content=\"{image_url}\" />\
          <meta name=\"twitter:card\" content=\"summary_large_image\" />\
          <meta name=\"twitter:title\" content=\"{title_esc} — CameraSync\" />\
+         <meta name=\"twitter:description\" content=\"{desc_esc}\" />\
          <meta name=\"twitter:image\" content=\"{image_url}\" />"
     );
     let mut out = html;
@@ -1518,25 +1522,43 @@ async fn guest_entry(
         );
     };
     let is_page = p.rest.as_deref().map_or(true, |r| r.is_empty());
-    let wants_html = headers
-        .get(axum::http::header::ACCEPT)
-        .and_then(|v| v.to_str().ok())
-        .map_or(false, |a| a.contains("text/html"));
+    // NOTE: no Accept-header gate — share-card bots (LINE, WhatsApp, …)
+    // request with `Accept: */*`, not text/html
     let has_cookie = crate::util::parse_cookies(&headers)
         .get(TUNNEL_COOKIE)
         .is_some();
-    if method == Method::GET && is_page && wants_html && !has_cookie {
+    if method == Method::GET && is_page && !has_cookie {
         if let (Some(info), Some(html)) = (
             tunnel_event_info(&state, &p.slug, &tunnel_id).await,
             crate::embedded_web_asset("index.html"),
         ) {
             let title = info["title"].as_str().unwrap_or("แกลเลอรีงานแต่ง");
             let origin = public_origin(&headers);
-            let page = inject_share_meta(
-                String::from_utf8(html.into_owned()).unwrap_or_default(),
-                title,
-                &format!("{origin}/e/{}/cover.jpg", p.slug),
-            );
+            let page = {
+                let url = format!("{origin}/e/{}", p.slug);
+                let mut parts: Vec<String> = Vec::new();
+                if let Some(a) = info["partner_a"].as_str().filter(|s| !s.is_empty()) {
+                    parts.push(a.to_string());
+                }
+                if let Some(b) = info["partner_b"].as_str().filter(|s| !s.is_empty()) {
+                    parts.push(b.to_string());
+                }
+                if let Some(d) = info["event_date"].as_str().filter(|s| !s.is_empty()) {
+                    parts.push(d.to_string());
+                }
+                let desc = if parts.is_empty() {
+                    "อัลบั้มรูปงานแต่งแบบ realtime — เปิดลิงก์เพื่อดูรูป".to_string()
+                } else {
+                    format!("อัลบั้มรูปงานแต่ง · {}", parts.join(" · "))
+                };
+                inject_share_meta(
+                    String::from_utf8(html.into_owned()).unwrap_or_default(),
+                    title,
+                    &desc,
+                    &url,
+                    &format!("{url}/cover.jpg"),
+                )
+            };
             let mut resp = axum::response::Response::builder()
                 .status(StatusCode::OK)
                 .header("content-type", "text/html; charset=utf-8")
