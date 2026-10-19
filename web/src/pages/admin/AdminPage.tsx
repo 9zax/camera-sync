@@ -72,7 +72,7 @@ function SetupCard() {
   const setup = useMutation({
     mutationFn: () => api.post("/api/auth/setup", { username, password }),
     onSuccess: () => {
-      toast.success("สร้างบัญชีผู้ดูแลสำเร็จ ยินดีต้อนรับ 🎉")
+      toast.success("สร้างบัญชีผู้ดูแลสำเร็จ ยินดีต้อนรับ")
       void qc.invalidateQueries()
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "สร้างบัญชีไม่สำเร็จ"),

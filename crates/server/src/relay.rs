@@ -950,8 +950,8 @@ async fn line_me_page(State(st): State<SharedHub>, headers: HeaderMap) -> Respon
         <p class="album">{album_html}</p>
         <p class="url">{url}</p>
         <div class="row">
-          <button class="btn" onclick="renameAlbum('{slug}','{album_escaped}')">✏️ ตั้งชื่ออัลบั้ม</button>
-          <button class="btn ghost" onclick="pickCover('{slug}','{cover}')">🖼 เลือกภาพปก</button>
+          <button class="btn" onclick="renameAlbum('{slug}','{album_escaped}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>ตั้งชื่ออัลบั้ม</button>
+          <button class="btn ghost" onclick="pickCover('{slug}','{cover}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>เลือกภาพปก</button>
           <a class="btn ghost" href="/r/qr/{slug}" download="CameraSync-{slug}-qr.png">ดาวน์โหลด QR</a>
           <a class="btn ghost" href="/e/{slug}/" target="_blank" rel="noopener">เปิดหน้าลูกค้า</a>
           <button class="btn ghost" onclick="navigator.clipboard.writeText('{url}').then(()=>this.textContent='คัดลอกแล้ว ✓')">คัดลอกลิงก์</button>
@@ -1351,13 +1351,17 @@ async fn line_poll(State(st): State<SharedHub>, Query(q): Query<LinePollQuery>) 
 }
 
 fn line_html_page(ok: bool, msg: &str) -> Response {
-    let (emoji, color) = if ok { ("✓", "#0f9d58") } else { ("✕", "#b3261e") };
+    let icon = if ok {
+        "<svg width=\"52\" height=\"52\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#0f9d58\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M20 6 9 17l-5-5\"/></svg>".to_string()
+    } else {
+        "<svg width=\"52\" height=\"52\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#b3261e\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg>".to_string()
+    };
     let html = format!(
         "<!doctype html><html lang=th><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>\
          <title>CameraSync — LINE Login</title>\
          <body style=\"font-family:system-ui;display:flex;min-height:100vh;align-items:center;justify-content:center;background:#faf7f2;color:#2a2420\">\
          <div style=text-align:center;padding:24px>\
-         <div style='font-size:52px;color:{color}'>{emoji}</div>\
+         <div>{icon}</div>\
          <h2 style=margin:14px 0>CameraSync</h2>\
          <p style=color:#6b6560;max-width:280px>{msg}</p>\
          </div></body></html>"

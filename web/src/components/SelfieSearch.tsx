@@ -7,7 +7,7 @@ import {
   useTransform,
   type Variants,
 } from "motion/react"
-import { Camera, Images, Loader2, RotateCcw, ScanFace, Search, ShieldCheck, Upload } from "lucide-react"
+import { Camera, Images, Loader2, RotateCcw, ScanFace, Search, ShieldCheck, Upload, PartyPopper } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { CameraSheet } from "@/components/CameraSheet"
@@ -270,7 +270,8 @@ export function SelfieSearch({ slug }: { slug: string }) {
                           {result.count}
                         </motion.span>
                       </AnimatePresence>{" "}
-                      รูป 🎉
+                      รูป{" "}
+                      <PartyPopper className="inline size-4 text-primary" aria-hidden />
                     </>
                   ) : (
                     "ยังไม่พบรูปที่คล้ายกัน"
