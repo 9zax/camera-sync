@@ -114,3 +114,23 @@ pub fn lan_ip() -> Option<String> {
     s.connect("8.8.8.8:80").ok()?;
     Some(s.local_addr().ok()?.ip().to_string())
 }
+
+/// The machine token from the saved hub session — photographer-side routes
+/// trust proxied admin-lite actions (rename/cover) that carry it.
+pub fn machine_token(data_dir: &std::path::Path) -> String {
+    let Ok(text) = std::fs::read_to_string(data_dir.join("machine-session.json")) else {
+        return String::new();
+    };
+    serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .and_then(|v| v["token"].as_str().map(|s| s.to_string()))
+        .unwrap_or_default()
+}
+
+/// Constant-time-ish equality for token comparison.
+pub fn token_matches(a: &str, b: &str) -> bool {
+    if a.is_empty() || a.len() != b.len() {
+        return false;
+    }
+    a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}

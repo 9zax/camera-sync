@@ -67,6 +67,9 @@ pub struct HubState {
     /// share-link previews (album title + cover) without hitting the tunnel
     /// for every page view
     event_info: Mutex<HashMap<String, (i64, serde_json::Value)>>,
+    /// tunnel_id → machine session token — lets the hub's LINE-web actions
+    /// (rename/cover from /r/line/me) authenticate against the machine
+    machine_tokens: Mutex<HashMap<String, String>>,
     counter: AtomicU64,
 }
 
@@ -188,6 +191,7 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
         slug_map: Mutex::new(HashMap::new()),
         line_pending: Mutex::new(HashMap::new()),
         event_info: Mutex::new(HashMap::new()),
+        machine_tokens: Mutex::new(HashMap::new()),
         counter: AtomicU64::new(1),
     });
 
@@ -202,6 +206,10 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
         .route("/r/line/login", get(line_login_redirect))
         .route("/r/line/callback", get(line_callback))
         .route("/r/line/poll", get(line_poll))
+        .route("/r/line/rename", post(line_rename))
+        .route("/r/line/cover", post(line_cover))
+        .route("/r/line/photos/{slug}", get(line_photos))
+        .route("/r/line/thumb/{slug}/{photo_id}", get(line_thumb))
         .route("/r/machine/info", get(machine_info))
         .route("/r/line/start", get(line_web_start))
         .route("/r/line/me", get(line_me_page))
@@ -745,6 +753,161 @@ async fn line_my_slugs(State(st): State<SharedHub>, headers: HeaderMap) -> Respo
     Json(serde_json::json!({ "slugs": slugs })).into_response()
 }
 
+/// Proxy a machine-token-authenticated action through the event's tunnel.
+async fn line_machine_proxy(
+    st: &SharedHub,
+    slug: &str,
+    method: Method,
+    path: String,
+    body: Option<serde_json::Value>,
+) -> Response {
+    let Some(tunnel_id) = st.slug_map.lock().await.get(slug).cloned() else {
+        return error_page(StatusCode::NOT_FOUND, "ไม่พบงานนี้บน hub — เครื่องช่างภาพอาจออฟไลน์อยู่");
+    };
+    let token = st.machine_tokens.lock().await.get(&tunnel_id).cloned();
+    let Some(token) = token else {
+        return error_page(StatusCode::SERVICE_UNAVAILABLE, "เครื่องช่างภาพเชื่อมต่อแบบเก่า — รีสตาร์ตแอปบนเครื่องช่างภาพก่อน");
+    };
+    let mut headers = HeaderMap::new();
+    if let Ok(v) = axum::http::HeaderValue::from_str(&token) {
+        headers.insert("x-machine-token", v);
+    }
+    let bytes = match body {
+        Some(v) => match serde_json::to_vec(&v) {
+            Ok(b) => {
+                let ct = axum::http::HeaderValue::from_static("application/json");
+                headers.insert(axum::http::header::CONTENT_TYPE, ct);
+                axum::body::Bytes::from(b)
+            }
+            Err(e) => return error_page(StatusCode::BAD_REQUEST, &format!("json: {e}")),
+        },
+        None => axum::body::Bytes::new(),
+    };
+    proxy(st, &tunnel_id, method, path, headers, bytes).await
+}
+
+#[derive(Deserialize)]
+struct LineActionReq {
+    slug: String,
+    title: Option<String>,
+    photo_id: Option<String>,
+}
+
+async fn line_rename(State(st): State<SharedHub>, headers: HeaderMap, Json(req): Json<LineActionReq>) -> Response {
+    if web_session_user(&st, &headers).await.is_none() {
+        return crate::error::AppError::Unauthorized("กรุณาเข้าสู่ระบบด้วย LINE ก่อน".into()).into_response();
+    }
+    let resp = line_machine_proxy(
+        &st,
+        &req.slug,
+        Method::POST,
+        format!("/api/m/{}/rename", req.slug),
+        Some(serde_json::json!({ "title": req.title.clone().unwrap_or_default() })),
+    )
+    .await;
+    if resp.status().is_success() {
+        st.event_info.lock().await.remove(&req.slug);
+    }
+    resp
+}
+
+async fn line_cover(State(st): State<SharedHub>, headers: HeaderMap, Json(req): Json<LineActionReq>) -> Response {
+    if web_session_user(&st, &headers).await.is_none() {
+        return crate::error::AppError::Unauthorized("กรุณาเข้าสู่ระบบด้วย LINE ก่อน".into()).into_response();
+    }
+    let resp = line_machine_proxy(
+        &st,
+        &req.slug,
+        Method::POST,
+        format!("/api/m/{}/cover", req.slug),
+        Some(serde_json::json!({ "photo_id": req.photo_id })),
+    )
+    .await;
+    if resp.status().is_success() {
+        st.event_info.lock().await.remove(&req.slug);
+    }
+    resp
+}
+
+async fn line_photos(State(st): State<SharedHub>, Path(slug): Path<String>, headers: HeaderMap) -> Response {
+    if web_session_user(&st, &headers).await.is_none() {
+        return crate::error::AppError::Unauthorized("กรุณาเข้าสู่ระบบด้วย LINE ก่อน".into()).into_response();
+    }
+    line_machine_proxy(&st, &slug, Method::GET, format!("/api/m/{}/photos", slug), None).await
+}
+
+/// Cover-picker thumbnail, reachable from the logged-in /r/line/me page.
+async fn line_thumb(
+    State(st): State<SharedHub>,
+    Path((slug, photo_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Response {
+    if web_session_user(&st, &headers).await.is_none() {
+        return crate::error::AppError::Unauthorized("login required".into()).into_response();
+    }
+    line_machine_proxy(
+        &st,
+        &slug,
+        Method::GET,
+        format!("/api/photos/{photo_id}/file?variant=thumb"),
+        None,
+    )
+    .await
+}
+
+/// modal + JS for rename/cover on the "งานของฉัน" page (kept out of the
+/// format! template so braces stay literal)
+const LINE_ME_UI: &str = r#"<div class="modal-bg" id="coverModal"><div class="modal">
+<h3 id="coverTitle">เลือกภาพปกอัลบั้ม</h3>
+<div class="thumbs" id="coverThumbs">กำลังโหลดรูป…</div>
+<div class="mrow">
+  <button class="btn ghost" onclick="closeCover()">ปิด</button>
+  <button class="btn ghost" onclick="clearCover()">ใช้รูปใหม่ล่าสุดแทน</button>
+</div>
+<p class="mnote">ภาพปกจะแสดงในการ์ดตอนแชร์ลิงก์ (LINE/แอปอื่น) — กดรูปที่ต้องการได้เลย</p>
+</div></div>
+<script>
+var coverSlug=null,coverCur=null;
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function renameAlbum(slug,current){
+  var n=prompt('ตั้งชื่ออัลบั้ม (ลิงก์/QR เดิมไม่เปลี่ยน):',current||'');
+  if(n===null)return;
+  fetch('/r/line/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:slug,title:n})})
+    .then(function(r){if(!r.ok)throw 0;location.reload()})
+    .catch(function(){alert('บันทึกไม่สำเร็จ — เครื่องช่างภาพออนไลน์อยู่ไหม?')});
+}
+function pickCover(slug,cur){
+  coverSlug=slug;coverCur=cur||'';
+  document.getElementById('coverModal').classList.add('show');
+  var box=document.getElementById('coverThumbs');
+  box.textContent='กำลังโหลดรูป…';
+  fetch('/r/line/photos/'+encodeURIComponent(slug)).then(function(r){return r.json()}).then(function(d){
+    var items=(d&&d.items)||[];
+    if(!items.length){box.textContent='ยังไม่มีรูปในงานนี้';return}
+    box.innerHTML='';
+    items.forEach(function(it){
+      var b=document.createElement('button');
+      b.className=(it.id===coverCur)?'cur':'';
+      b.innerHTML='<img loading="lazy" src="/r/line/thumb/'+encodeURIComponent(slug)+'/'+encodeURIComponent(it.id)+'" alt="">';
+      b.onclick=function(){setCover(it.id)};
+      box.appendChild(b);
+    });
+  }).catch(function(){box.textContent='โหลดรูปไม่สำเร็จ'});
+}
+function setCover(pid){
+  fetch('/r/line/cover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:coverSlug,photo_id:pid})})
+    .then(function(r){if(!r.ok)throw 0;location.reload()})
+    .catch(function(){alert('บันทึกภาพปกไม่สำเร็จ')});
+}
+function clearCover(){
+  fetch('/r/line/cover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:coverSlug,photo_id:null})})
+    .then(function(r){if(!r.ok)throw 0;location.reload()})
+    .catch(function(){alert('บันทึกไม่สำเร็จ')});
+}
+function closeCover(){document.getElementById('coverModal').classList.remove('show')}
+document.getElementById('coverModal').addEventListener('click',function(e){if(e.target===this)closeCover()});
+</script>"#;
+
 /// "งานของฉัน" — every guest QR this photographer has created, straight
 /// from the hub's live slug map (their machine announces them).
 async fn line_me_page(State(st): State<SharedHub>, headers: HeaderMap) -> Response {
@@ -757,20 +920,45 @@ async fn line_me_page(State(st): State<SharedHub>, headers: HeaderMap) -> Respon
     let mut cards = String::new();
     for slug in &slugs {
         let url = format!("{base}/e/{slug}/");
+        let tid = st.slug_map.lock().await.get(slug).cloned();
+        let info = match &tid {
+            Some(t) => tunnel_event_info(&st, slug, t).await,
+            None => None,
+        };
+        let album = info
+            .as_ref()
+            .and_then(|v| v["title"].as_str())
+            .filter(|t| !t.is_empty())
+            .unwrap_or("")
+            .to_string();
+        let cover = info
+            .as_ref()
+            .and_then(|v| v["cover_photo_id"].as_str())
+            .unwrap_or("")
+            .to_string();
+        let album_html = if album.is_empty() {
+            "<span class=\"muted\">ยังไม่ได้ตั้งชื่อ (แสดงชื่อโฟลเดอร์)</span>".to_string()
+        } else {
+            format!("<b>{album}</b>")
+        };
         cards.push_str(&format!(
             r#"<div class="card">
       <div class="qrbox"><img src="/r/qr/{slug}" alt="QR {slug}" loading="lazy"></div>
       <div class="meta">
         <h3>/{slug}/</h3>
+        <p class="album">{album_html}</p>
         <p class="url">{url}</p>
         <div class="row">
-          <a class="btn" href="/r/qr/{slug}" download="CameraSync-{slug}-qr.png">ดาวน์โหลด QR</a>
+          <button class="btn" onclick="renameAlbum('{slug}','{album_escaped}')">✏️ ตั้งชื่ออัลบั้ม</button>
+          <button class="btn ghost" onclick="pickCover('{slug}','{cover}')">🖼 เลือกภาพปก</button>
+          <a class="btn ghost" href="/r/qr/{slug}" download="CameraSync-{slug}-qr.png">ดาวน์โหลด QR</a>
           <a class="btn ghost" href="/e/{slug}/" target="_blank" rel="noopener">เปิดหน้าลูกค้า</a>
           <button class="btn ghost" onclick="navigator.clipboard.writeText('{url}').then(()=>this.textContent='คัดลอกแล้ว ✓')">คัดลอกลิงก์</button>
         </div>
-        <p class="hint">ปริ้น QR นี้แปะโต๊ะให้ลูกค้าสแกน หรือส่งลิงก์ให้ทีมงาน — ลูกค้าสแกนแล้วดูรูปได้เลย</p>
+        <p class="hint">ตั้งชื่ออัลบั้ม+เลือกภาพปกแล้ว การ์ดตอนแชร์ลิงก์จะโชว์สองอย่างนี้ทันที</p>
       </div>
-    </div>"#
+    </div>"#,
+            album_escaped = album.replace('\'', "")
         ));
     }
     let empty = if slugs.is_empty() {
@@ -829,6 +1017,18 @@ h2.title em{{font-style:normal;color:oklch(84% .19 80.46)}}
 .empty p:first-child b{{color:oklch(84% .19 80.46);font-weight:500}}
 footer{{border-top:1px solid oklch(78% 0 0/.16);margin-top:34px;padding:18px 0 30px;text-align:center;font-size:12.5px;color:oklch(62% 0 0);background:oklch(4% .004 95)}}
 footer a{{color:oklch(72% 0 0)}}
+.album{{font-family:Kanit,"Noto Sans Thai",sans-serif;font-size:15px;margin:6px 0 0;color:oklch(84% .19 80.46)}}
+.album .muted{{color:oklch(62% 0 0);font-weight:300}}
+.modal-bg{{position:fixed;inset:0;background:oklch(4% .004 95/.86);display:none;align-items:center;justify-content:center;padding:18px;z-index:50}}
+.modal-bg.show{{display:flex}}
+.modal{{background:oklch(11% .006 95);border:1px solid oklch(78% 0 0/.22);border-radius:8px;max-width:560px;width:100%;max-height:86vh;overflow:auto;padding:22px}}
+.modal h3{{font-family:Kanit,"Noto Sans Thai",sans-serif;font-weight:400;margin-bottom:14px;color:oklch(91% 0 0)}}
+.thumbs{{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}}
+.thumbs button{{border:2px solid transparent;border-radius:6px;padding:0;background:none;cursor:pointer;overflow:hidden}}
+.thumbs button.cur{{border-color:oklch(84% .19 80.46)}}
+.thumbs img{{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:oklch(15% .008 95)}}
+.mrow{{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}}
+.mnote{{font-size:12px;color:oklch(62% 0 0);margin-top:10px}}
 </style></head><body><div class="wrap">
 <header>
   <a class="brand" href="/"><svg width="38" height="38" viewBox="0 0 512 512" style="display:block">
@@ -856,7 +1056,9 @@ footer a{{color:oklch(72% 0 0)}}
 <p class="count"><b>{me_count}</b> — รายการอัปเดตจากเครื่องที่เชื่อมต่ออยู่ของคุณ</p>
 <div class="grid">{cards}{empty}</div>
 <footer>CameraSync — รูปทั้งหมดอยู่บนเครื่องคุณ เราเป็นเพียงทางผ่าน · <a href="/" style="color:inherit;font-weight:600">หน้าแรก</a></footer>
-</div>{reload}</body></html>"##
+</div>{cover_ui}{reload}</body></html>"##,
+        reload = reload,
+        cover_ui = LINE_ME_UI
     );
     (
         [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
@@ -1178,7 +1380,13 @@ async fn ws_connect(
     // authenticated machines must use their own derived tunnel id (u-<username>)
     if let Some(token) = &q.token {
         match session_user(&state, token).await {
-            Some(username) if tunnel_id_for(&username) == id => {}
+            Some(username) if tunnel_id_for(&username) == id => {
+                state
+                    .machine_tokens
+                    .lock()
+                    .await
+                    .insert(id.clone(), token.clone());
+            }
             _ => {
                 return crate::error::AppError::Unauthorized("invalid machine token".into())
                     .into_response()

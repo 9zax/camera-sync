@@ -520,3 +520,82 @@ pub async fn qr_png(
     )
         .into_response())
 }
+
+// ---- machine-token guarded actions (driven from the hub's /r/line/me) ----
+// The photographer's phone sits on the hub; these narrow endpoints let the
+// hub act on their behalf when the request carries the machine token that
+// only the hub (post-websocket-auth) and this machine know.
+
+fn require_machine(st: &SharedState, headers: &HeaderMap) -> Result<(), AppError> {
+    let given = headers
+        .get("x-machine-token")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if crate::util::token_matches(given, &crate::util::machine_token(&st.cfg.data_dir)) {
+        Ok(())
+    } else {
+        Err(AppError::Unauthorized("machine token ไม่ถูกต้อง".into()))
+    }
+}
+
+async fn event_by_slug(st: &SharedState, slug: &str) -> Result<Event, AppError> {
+    fetch_event_by_slug(st, slug).await
+}
+
+#[derive(Deserialize)]
+pub struct MachineRenameReq {
+    pub title: String,
+}
+
+pub async fn machine_rename(
+    State(st): State<SharedState>,
+    Path(slug): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<MachineRenameReq>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_machine(&st, &headers)?;
+    let ev = event_by_slug(&st, &slug).await?;
+    rename_event(&st, &ev.id, &req.title).await?;
+    Ok(Json(json!({ "ok": true, "title": req.title.trim() })))
+}
+
+#[derive(Deserialize)]
+pub struct MachineCoverReq {
+    pub photo_id: Option<String>,
+}
+
+pub async fn machine_cover(
+    State(st): State<SharedState>,
+    Path(slug): Path<String>,
+    headers: HeaderMap,
+    Json(req): Json<MachineCoverReq>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_machine(&st, &headers)?;
+    let ev = event_by_slug(&st, &slug).await?;
+    let pid = req.photo_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    set_cover(&st, &ev.id, pid).await?;
+    Ok(Json(json!({ "ok": true, "cover_photo_id": pid })))
+}
+
+/// Latest ready photos (for the cover picker) — id + filename only.
+pub async fn machine_photos(
+    State(st): State<SharedState>,
+    Path(slug): Path<String>,
+    headers: HeaderMap,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_machine(&st, &headers)?;
+    let ev = event_by_slug(&st, &slug).await?;
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT id, filename FROM photos WHERE event_id = ?1 AND status = 'ready' \
+         ORDER BY created_at DESC, id DESC LIMIT 30",
+    )
+    .bind(&ev.id)
+    .fetch_all(&st.pool)
+    .await
+    .map_err(AppError::from)?;
+    let items: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|(id, filename)| json!({ "id": id, "filename": filename }))
+        .collect();
+    Ok(Json(json!({ "items": items })))
+}
