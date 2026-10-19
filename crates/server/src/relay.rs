@@ -1546,6 +1546,9 @@ async fn guest_entry(
                 if let Some(d) = info["event_date"].as_str().filter(|s| !s.is_empty()) {
                     parts.push(d.to_string());
                 }
+                if let Some(n) = info["photo_count"].as_i64().filter(|n| *n > 0) {
+                    parts.push(format!("{n} รูป"));
+                }
                 let desc = if parts.is_empty() {
                     "อัลบั้มรูปงานแต่งแบบ realtime — เปิดลิงก์เพื่อดูรูป".to_string()
                 } else {
