@@ -48,6 +48,7 @@ struct EventLink {
     slug: String,
     title: String,
     enabled: bool,
+    upload_token: String,
 }
 
 #[derive(Serialize)]
@@ -62,6 +63,8 @@ struct Status {
     local_admin: Option<(String, String)>,
     import_dir: String,
     face_state: String, // ready | loading | unavailable
+    lan_ip: Option<String>,
+    ftp: Option<wedsync_server::ftp::FtpInfo>,
 }
 
 impl App {
@@ -178,18 +181,19 @@ async fn collect_events() -> Vec<EventLink> {
     let Some(st) = wedsync_server::server_state() else {
         return vec![];
     };
-    let rows: Vec<(String, String, String, i64)> = sqlx::query_as(
-        "SELECT id, slug, title, COALESCE(enabled, 1) FROM events ORDER BY created_at DESC",
+    let rows: Vec<(String, String, String, i64, String)> = sqlx::query_as(
+        "SELECT id, slug, title, COALESCE(enabled, 1), upload_token FROM events ORDER BY created_at DESC",
     )
     .fetch_all(&st.pool)
     .await
     .unwrap_or_default();
     rows.into_iter()
-        .map(|(id, slug, title, enabled)| EventLink {
+        .map(|(id, slug, title, enabled, upload_token)| EventLink {
             id,
             slug,
             title,
             enabled: enabled != 0,
+            upload_token,
         })
         .collect()
 }
@@ -254,6 +258,8 @@ async fn get_status(app: State<'_, App>) -> Result<Status, String> {
         local_admin: admin,
         import_dir: default_import_dir().display().to_string(),
         face_state,
+        lan_ip: wedsync_server::util::lan_ip(),
+        ftp: wedsync_server::ftp::info().cloned(),
     })
 }
 
@@ -471,6 +477,13 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     }
     tray.build(app)?;
     Ok(())
+}
+
+#[tauri::command]
+fn qr_for_url(url: String) -> Result<String, String> {
+    let bytes = qr_png_bytes(&url)?;
+    use base64::Engine;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
 fn main() {

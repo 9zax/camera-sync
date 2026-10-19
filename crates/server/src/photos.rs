@@ -159,6 +159,69 @@ pub async fn upload(
     Ok(Json(json!({ "uploaded": uploaded, "duplicated": duplicated, "ids": ids })))
 }
 
+/// Token-based upload info — lets the mobile upload page greet the user
+/// with the album name before anything is sent. The token is the event's
+/// upload_token (same secret the watcher flow trusts).
+pub async fn token_info(
+    State(st): State<SharedState>,
+    Path(token): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let ev = event_by_upload_token(&st, &token).await?;
+    Ok(Json(json!({ "slug": ev.slug, "title": ev.title })))
+}
+
+/// Mobile upload: same ingest path as the admin uploader, authorized by the
+/// event's upload token instead of an admin session — the QR/link for this
+/// is shown in the desktop app per event.
+pub async fn upload_by_token(
+    State(st): State<SharedState>,
+    Path(token): Path<String>,
+    mut multipart: Multipart,
+) -> ApiResult<Json<serde_json::Value>> {
+    let ev = event_by_upload_token(&st, &token).await?;
+
+    let mut uploaded = 0u64;
+    let mut duplicated = 0u64;
+    let mut ids: Vec<String> = Vec::new();
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::bad(format!("multipart error: {e}")))?
+    {
+        let Some(filename) = field.file_name().map(|s| s.to_string()) else {
+            continue;
+        };
+        let data = field
+            .bytes()
+            .await
+            .map_err(|e| AppError::bad(format!("reading file {filename}: {e}")))?;
+        if ingest_bytes(&st, &ev.id, &filename, &data).await? {
+            uploaded += 1;
+            ids.push(filename);
+        } else {
+            duplicated += 1;
+        }
+    }
+
+    Ok(Json(json!({ "uploaded": uploaded, "duplicated": duplicated, "ids": ids })))
+}
+
+async fn event_by_upload_token(st: &SharedState, token: &str) -> Result<crate::events::Event, AppError> {
+    if token.len() < 20 {
+        return Err(AppError::Unauthorized("ลิงก์อัปโหลดไม่ถูกต้อง".into()));
+    }
+    let ev: Option<crate::events::Event> = sqlx::query_as(
+        "SELECT id, slug, title, partner_a, partner_b, event_date, pin, face_enabled, upload_token, created_at, enabled, cover_photo_id \
+         FROM events WHERE upload_token = ?1",
+    )
+    .bind(token)
+    .fetch_optional(&st.pool)
+    .await
+    .map_err(AppError::from)?;
+    ev.ok_or_else(|| AppError::Unauthorized("ลิงก์อัปโหลดไม่ถูกต้อง (หรือถูกเปลี่ยนแล้ว)".into()))
+}
+
 #[derive(Deserialize)]
 pub struct ListQuery {
     pub limit: Option<i64>,

@@ -160,6 +160,14 @@
       <div class="status"><span class="dot" id="faceDot"></span><span id="faceText">AI หารูปตัวเอง: กำลังเตรียม…</span></div>
     </div>
 
+    <!-- camera FTP receiver -->
+    <div class="card" id="ftpCard" style="display:none">
+      <h2>รับรูปจากกล้อง (FTP)</h2>
+      <p class="sub">กล้องที่มี FTP ในตัว (Canon R5/R6 II+, Nikon Z8/Z9, Sony A9 III/A7 IV+, Fuji) ตั้งค่าส่งรูปมาที่เครื่องนี้ได้เลย — รูปจะเข้าอัลบั้มอัตโนมัติที่กดชัตเตอร์</p>
+      <div class="status"><span class="dot on"></span><span>โฮสต์: <b id="ftpHost"></b> · พอร์ต <b id="ftpPort"></b></span></div>
+      <div class="status"><span class="dot on"></span><span>ผู้ใช้: <b id="ftpUser"></b> · รหัส: <b id="ftpPass"></b></span></div>
+      <p class="sub" id="ftpHint" style="margin-top:8px">ในกล้องเลือกปลายทางแบบ FTP แล้วกรอกค่าด้านบน (โหมด Passive ใช้ได้)</p>
+    </div>
     <!-- one-click LINE login -->
     <div class="card" id="loginCard">
       <h2>เริ่มใช้งานด้วยปุ่มเดียว</h2>
@@ -250,6 +258,14 @@
           $("srvSub").textContent = "รูปทั้งหมดอยู่บนดิสก์เครื่องนี้ — ไม่มีการอัปโหลดไปเก็บที่อื่น";
         }
         const face = $("faceDot"), faceT = $("faceText");
+        const ftpCard = $("ftpCard");
+        if (s.ftp && s.lan_ip) {
+          ftpCard.style.display = "";
+          $("ftpHost").textContent = s.lan_ip;
+          $("ftpPort").textContent = s.ftp.port;
+          $("ftpUser").textContent = s.ftp.user;
+          $("ftpPass").textContent = s.ftp.pass;
+        }
         if (s.face_state === "ready") {
           face.className = "dot on";
           faceT.textContent = "AI หารูปตัวเอง (ประมวลผลบนเครื่องนี้): พร้อมใช้งาน ✓";
@@ -278,6 +294,7 @@
               '<div class="acts">' +
               '<button class="secondary" data-a="rename">ตั้งชื่อ</button>' +
               '<button class="secondary" data-a="qr">QR</button>' +
+              '<button class="secondary" data-a="upqr">QR ส่งรูป</button>' +
               '<button class="secondary" data-a="copy">คัดลอกลิงก์</button>' +
               '<button class="secondary" data-a="open">เปิด</button>' +
               '<button class="secondary" data-a="toggle"></button>' +
@@ -294,6 +311,8 @@
             };
             paint();
             row.querySelector('[data-a="qr"]').onclick = () => showQr(ev, url);
+            row.querySelector('[data-a="upqr"]').onclick = () =>
+              showQr(ev, "http://" + s.lan_ip + ":" + s.port + "/upload/" + ev.upload_token, "QR ส่งรูปเข้างานนี้");
             row.querySelector('[data-a="rename"]').onclick = async () => {
               const name = prompt('ตั้งชื่ออัลบั้มนี้ (ลิงก์/QR เดิมไม่เปลี่ยน):', ev.title || ev.slug);
               if (name === null) return;
@@ -352,11 +371,14 @@
 
       // ---- QR modal ----
       let qrSlug = null;
-      const showQr = async (ev, url) => {
-        qrSlug = ev.slug;
-        $("qrTitle").textContent = "QR — " + (ev.title || ev.slug);
+      const showQr = async (ev, url, title) => {
+        qrSlug = title ? null : ev.slug;
+        $("qrTitle").textContent = title || "QR — " + (ev.title || ev.slug);
         $("qrUrl").textContent = url;
-        $("qrImg").src = "data:image/png;base64," + (await invoke("guest_qr", { slug: ev.slug }));
+        const b64 = title
+          ? await invoke("qr_for_url", { url })
+          : await invoke("guest_qr", { slug: ev.slug });
+        $("qrImg").src = "data:image/png;base64," + b64;
         $("qrModal").classList.add("show");
       };
       $("qrClose").onclick = () => $("qrModal").classList.remove("show");

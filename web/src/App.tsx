@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom"
 import Landing from "@/pages/Landing"
 import Perf from "@/pages/Perf"
 import GuestEvent from "@/pages/GuestEvent"
+import MobileUpload from "@/pages/MobileUpload"
 import AdminPage from "@/pages/admin/AdminPage"
 import EventDetail from "@/pages/admin/EventDetail"
 
@@ -41,6 +42,7 @@ function AnimatedRoutes() {
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<Page><Landing /></Page>} />
         <Route path="/perf" element={<Page><Perf /></Page>} />
+        <Route path="/upload/:token" element={<Page><MobileUpload /></Page>} />
         <Route path="/e/:slug" element={<Page><GuestEvent /></Page>} />
         <Route path="/e/:slug/*" element={<Page><GuestEvent /></Page>} />
         <Route path="/admin" element={<Page><AdminPage /></Page>} />

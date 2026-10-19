@@ -105,3 +105,12 @@ pub fn machine_short_id(data_dir: &std::path::Path) -> String {
         .take(8)
         .collect()
 }
+
+/// Best-effort LAN IP (the source address a route to the internet would use)
+/// — shown in the desktop app so the photographer can type host:port into
+/// the camera's FTP settings. No packet is actually sent.
+pub fn lan_ip() -> Option<String> {
+    let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    s.connect("8.8.8.8:80").ok()?;
+    Some(s.local_addr().ok()?.ip().to_string())
+}

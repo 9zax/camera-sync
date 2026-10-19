@@ -8,6 +8,7 @@ pub mod db;
 pub mod error;
 pub mod events;
 pub mod faces;
+pub mod ftp;
 pub mod guest;
 pub mod importer;
 pub mod likes;
@@ -353,6 +354,17 @@ pub async fn run_server(
         let event_id = importer::resolve_or_create_event(&state, &import_event, &dir).await?;
         remember_import_dir(&state, &dir, &event_id).await?;
         importer::start(state.clone(), dir.clone(), event_id);
+        // FTP receiver: cameras push photos straight into the watched folder
+        let ftp_port: u16 = std::env::var("FTP_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(2121);
+        tokio::spawn({
+            let data_dir = state.cfg.data_dir.clone();
+            async move {
+                if let Err(e) = ftp::run(data_dir, dir.clone(), ftp_port).await {
+                    tracing::error!("FTP receiver failed: {e:#}");
+                    eprintln!("◉ FTP receiver failed: {e:#}");
+                }
+            }
+        });
     }
 
     serve_http(state.clone(), port).await
@@ -391,6 +403,8 @@ async fn serve_http(state: SharedState, port: u16) -> anyhow::Result<()> {
         .route("/api/events/{id}/cover", post(events::set_cover_route))
         .route("/api/events/{id}/qr.png", get(events::qr_png))
         .route("/api/events/{id}/photos", get(photos::list_admin).post(photos::upload))
+        .route("/api/u/{token}/info", get(photos::token_info))
+        .route("/api/u/{token}/photos", post(photos::upload_by_token))
         .route("/api/events/{id}/download.zip", get(photos::download_zip))
         .route("/api/photos/{id}", delete(photos::delete_one))
         .route("/api/photos/{id}/file", get(photos::serve_file))
