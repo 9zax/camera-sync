@@ -3,6 +3,7 @@ import { useMemo } from "react"
 import { Navigate, Route, Routes, useLocation } from "react-router-dom"
 import Landing from "@/pages/Landing"
 import Perf from "@/pages/Perf"
+import Tests from "@/pages/Tests"
 import GuestEvent from "@/pages/GuestEvent"
 import MobileUpload from "@/pages/MobileUpload"
 import AdminPage from "@/pages/admin/AdminPage"
@@ -42,6 +43,7 @@ function AnimatedRoutes() {
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<Page><Landing /></Page>} />
         <Route path="/perf" element={<Page><Perf /></Page>} />
+        <Route path="/tests" element={<Page><Tests /></Page>} />
         <Route path="/upload/:token" element={<Page><MobileUpload /></Page>} />
         <Route path="/e/:slug" element={<Page><GuestEvent /></Page>} />
         <Route path="/e/:slug/*" element={<Page><GuestEvent /></Page>} />

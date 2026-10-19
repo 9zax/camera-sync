@@ -147,6 +147,10 @@ export default function Landing() {
               ขั้นตอนการใช้งาน
               <span className="absolute -bottom-1 left-0 h-px w-0 bg-gold transition-all duration-300 group-hover:w-full" />
             </a>
+            <a href="/tests" className="group relative hidden text-[13.5px] text-muted-foreground transition-colors hover:text-foreground sm:block">
+              ผลทดสอบ
+              <span className="absolute -bottom-1 left-0 h-px w-0 bg-gold transition-all duration-300 group-hover:w-full" />
+            </a>
             <a href="/perf" className="group relative hidden text-[13.5px] text-muted-foreground transition-colors hover:text-foreground sm:block">
               ประสิทธิภาพ
               <span className="absolute -bottom-1 left-0 h-px w-0 bg-gold transition-all duration-300 group-hover:w-full" />

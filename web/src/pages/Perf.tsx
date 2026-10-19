@@ -241,6 +241,11 @@ export default function Perf() {
             </Button>
           </motion.div>
 
+          <motion.p variants={reveal} className="mt-6 text-[13px] text-muted-foreground">
+            ผลทดสอบการใช้งานจริงของฟีเจอร์ (กล้อง FTP · มือถือ · like · การ์ดแชร์) อยู่ที่หน้า{" "}
+            <Link to="/tests" className="font-medium text-gold underline-offset-4 hover:underline">ผลทดสอบระบบ</Link>
+          </motion.p>
+
           <motion.p variants={reveal} className="mt-10 flex items-center gap-2 text-[12px] text-muted-foreground">
             <ShieldCheck className="size-4 text-patina" />
             ตัวเลขทุกตัววัดจากระบบ production เดียวกับที่ให้บริการอยู่ — ไม่มีเครื่องจัดพิเศษ

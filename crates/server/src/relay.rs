@@ -225,6 +225,7 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
         .route("/e/{slug}/cover.jpg", get(cover_jpg))
         .route("/e/{slug}/{*rest}", any(guest_entry))
         .route("/perf", any(perf_entry))
+        .route("/tests", any(perf_entry))
         .route("/assets/{*path}", any(assets_entry))
         .fallback(hub_fallback)
         .layer(axum::extract::DefaultBodyLimit::max(400 * 1024 * 1024))
@@ -1889,7 +1890,7 @@ async fn favicon_entry(State(state): State<SharedHub>, req: axum::extract::Reque
     }
 }
 
-/// /perf — visitors holding a tunnel cookie keep riding their photographer's
+/// /perf and /tests — visitors holding a tunnel cookie keep riding their photographer's
 /// tunnel (freshest SPA); everyone else gets the SPA embedded in this hub
 /// binary, so the landing's performance button works for the public.
 async fn perf_entry(State(state): State<SharedHub>, req: axum::extract::Request) -> Response {
