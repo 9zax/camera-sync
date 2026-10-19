@@ -67,15 +67,20 @@ pub fn fetch_glintr100(dir: &Path) -> Result<()> {
         return Ok(());
     }
     let url = "https://github.com/deepinsight/insightface/releases/download/v0.7/antelopev2.zip";
-    println!("⇣ downloading upgraded face recognizer glintr100 (~360 MB, one time)");
     let zip_path = dir.join("antelopev2.zip");
-    download(url, &zip_path)
-        .with_context(|| "downloading antelopev2.zip")?;
+    // entries inside the pack are prefixed with a folder (antelopev2/…)
+    if !zip_path.exists() || zip_path.metadata().map(|m| m.len() < 100_000_000).unwrap_or(true) {
+        println!("⇣ downloading upgraded face recognizer glintr100 (~360 MB, one time)");
+        download(url, &zip_path)
+            .with_context(|| "downloading antelopev2.zip")?;
+    }
     let f = std::fs::File::open(&zip_path)?;
     let mut zip = zip::ZipArchive::new(f)?;
-    let mut entry = zip
-        .by_name("glintr100.onnx")
+    let idx = zip
+        .file_names()
+        .position(|n| n.rsplit('/').next() == Some("glintr100.onnx"))
         .context("glintr100.onnx missing in antelopev2.zip")?;
+    let mut entry = zip.by_index(idx)?;
     let tmp = dir.join("glintr100.onnx.part");
     let mut out = std::fs::File::create(&tmp)?;
     std::io::copy(&mut entry, &mut out)?;
