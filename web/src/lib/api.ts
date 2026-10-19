@@ -66,6 +66,7 @@ export interface EventInfo {
   photo_count: number
   face_enabled: boolean
   pin_required: boolean
+  cover_photo_id?: string | null
 }
 
 export interface AdminEvent {

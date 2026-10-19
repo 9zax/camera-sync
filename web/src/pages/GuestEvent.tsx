@@ -14,7 +14,7 @@ import { GalleryGrid, GallerySkeleton } from "@/components/GalleryGrid"
 import type { PhotoItem } from "@/lib/api"
 import { Lightbox } from "@/components/Lightbox"
 import { SelfieSearch } from "@/components/SelfieSearch"
-import { api, listLikes, setLike, type EventInfo, type PhotoList } from "@/lib/api"
+import { api, listLikes, photoUrl, setLike, type EventInfo, type PhotoList } from "@/lib/api"
 import { formatEventDate } from "@/lib/format"
 
 /** Stable per-device guest id for likes — randomUUID needs a secure context,
@@ -266,6 +266,11 @@ export default function GuestEvent() {
     return names.join(" ♥ ")
   }, [info])
 
+  // album cover — the same photo the share card (OG) uses: the one the
+  // photographer picked, falling back to the newest photo exactly like the
+  // hub's /e/{slug}/cover.jpg
+  const coverPhotoId = info?.cover_photo_id || photos[0]?.id
+
   if (infoQuery.isLoading) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
@@ -302,9 +307,23 @@ export default function GuestEvent() {
   return (
     <div className="min-h-dvh pb-16">
       {/* header */}
-      <header className="relative overflow-hidden border-b border-border/60 bg-gradient-to-b from-secondary/70 to-background">
+      <header className="relative overflow-hidden border-b border-border/60">
+        {coverPhotoId && (
+          <img
+            src={photoUrl(coverPhotoId, "web")}
+            alt=""
+            aria-hidden
+            loading="eager"
+            draggable={false}
+            className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
+          />
+        )}
         <div
-          className="pointer-events-none absolute inset-0 [background-image:radial-gradient(42%_60%_at_50%_0%,oklch(84%_0.19_80.46/0.06),transparent),radial-gradient(22%_30%_at_88%_12%,oklch(70%_0.12_188/0.07),transparent)]"
+          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[oklch(7%_0.006_95/0.55)] via-[oklch(7%_0.006_95/0.75)] to-background"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute inset-0 [background-image:radial-gradient(42%_60%_at_50%_0%,oklch(84%_0.19_80.46/0.08),transparent),radial-gradient(22%_30%_at_88%_12%,oklch(70%_0.12_188/0.07),transparent)]"
           aria-hidden
         />
         <Heart
