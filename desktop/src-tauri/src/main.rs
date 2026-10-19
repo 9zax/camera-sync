@@ -487,6 +487,7 @@ fn qr_for_url(url: String) -> Result<String, String> {
 }
 
 fn main() {
+    wedsync_server::install_tls_provider();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())

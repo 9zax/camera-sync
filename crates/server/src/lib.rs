@@ -46,6 +46,13 @@ pub fn server_state() -> Option<SharedState> {
 }
 
 /// Default hub the desktop app connects to (override with CAMERASYNC_HUB).
+/// rustls needs one TLS crypto provider picked at runtime when more than one
+/// is compiled in (libunftp pulls aws-lc-rs alongside the ring-based tunnel).
+/// Idempotent; call before any TLS-using task starts.
+pub fn install_tls_provider() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
 pub fn default_hub() -> String {
     std::env::var("CAMERASYNC_HUB").unwrap_or_else(|_| "wss://sync.khunaistory.com".into())
 }
@@ -212,6 +219,7 @@ pub async fn run_server(
     import_dir: Option<PathBuf>,
     import_event: Option<String>,
 ) -> anyhow::Result<()> {
+    install_tls_provider();
     let cfg = config::Config::load(data_dir, true)?;
     let pool = db::init_pool(&cfg).await?;
     let state: Arc<AppState> = Arc::new(AppState {

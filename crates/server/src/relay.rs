@@ -175,6 +175,7 @@ async fn ensure_system_admin(db: &sqlx::SqlitePool) {
 }
 
 pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
+    crate::install_tls_provider();
     let cfg = crate::config::Config::load(data_dir.clone(), false)?;
     let db = crate::db::init_pool(&cfg).await?;
     ensure_system_admin(&db).await;
