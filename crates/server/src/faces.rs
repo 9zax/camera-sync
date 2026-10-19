@@ -34,6 +34,9 @@ pub enum EngineState {
 pub struct FaceEngine {
     det: std::sync::Mutex<Session>,
     rec: std::sync::Mutex<Session>,
+    /// which recognizer ONNX produced/will produce the embeddings (glintr100 /
+    /// w600k_r50) — changing it invalidates every stored embedding
+    pub recognizer: String,
 }
 
 #[derive(Debug, Clone)]
@@ -56,12 +59,23 @@ impl FaceDet {
 #[cfg(feature = "face")]
 impl FaceEngine {
     /// Returns Ok(None) when the model files are not present (face search disabled).
+    /// Recognizer: glintr100 (Glint360K R100, antelopev2 pack) when available —
+    /// stronger than the buffalo_l default — falling back to w600k_r50.
     pub fn load(models_dir: &Path) -> Result<Option<FaceEngine>> {
         let det_path = models_dir.join("det_10g.onnx");
-        let rec_path = models_dir.join("w600k_r50.onnx");
+        let rec_path = if models_dir.join("glintr100.onnx").exists() {
+            models_dir.join("glintr100.onnx")
+        } else {
+            models_dir.join("w600k_r50.onnx")
+        };
         if !det_path.exists() || !rec_path.exists() {
             return Ok(None);
         }
+        let rec_name = rec_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("recognition")
+            .to_string();
         let load = |p: &Path, what: &str| -> Result<Session> {
             Session::builder()
                 .and_then(|b| b.with_optimization_level(GraphOptimizationLevel::Level3))
@@ -70,11 +84,13 @@ impl FaceEngine {
                 .with_context(|| format!("loading {what} from {}", p.display()))
         };
         let det = load(&det_path, "face detection model (det_10g.onnx)")?;
-        let rec = load(&rec_path, "face recognition model (w600k_r50.onnx)")?;
-        tracing::info!("face models loaded from {}", models_dir.display());
+        let rec = load(&rec_path, &format!("face recognition model ({rec_name})"))?;
+        tracing::info!("face models loaded from {} (recognizer: {rec_name})", models_dir.display());
+        println!("  ◉ face search ready — recognizer: {rec_name}");
         Ok(Some(FaceEngine {
             det: std::sync::Mutex::new(det),
             rec: std::sync::Mutex::new(rec),
+            recognizer: rec_name,
         }))
     }
 

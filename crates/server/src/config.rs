@@ -34,7 +34,9 @@ impl Config {
             face_threshold: std::env::var("FACE_THRESHOLD")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(0.35),
+                // glintr100 separates same-person scores (~0.7+) from noise
+                // (~<0.6) more sharply than w600k_r50 did at 0.35
+                .unwrap_or(0.40),
             web_dist: PathBuf::from(
                 std::env::var("WEB_DIST").unwrap_or_else(|_| "web/dist".into()),
             ),

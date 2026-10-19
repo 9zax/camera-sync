@@ -238,14 +238,35 @@ pub async fn run_server(
             let res = tokio::task::spawn_blocking({
                 let dir = dir.clone();
                 move || -> anyhow::Result<Option<faces::FaceEngine>> {
-                    match faces::FaceEngine::load(&dir)? {
-                        Some(engine) => Ok(Some(engine)),
+                    let loaded = match faces::FaceEngine::load(&dir)? {
+                        Some(engine) => Some(engine),
                         None => {
                             tracing::info!("face models missing — downloading once (~280 MB)…");
                             crate::models_fetch::fetch_models(&dir)?;
-                            faces::FaceEngine::load(&dir)
+                            faces::FaceEngine::load(&dir)?
+                        }
+                    };
+                    // upgrade path: installs that shipped with buffalo_l get the
+                    // stronger glintr100 recognizer automatically (one-time
+                    // download); the marker logic below re-indexes afterwards
+                    if let Some(engine) = &loaded {
+                        if engine.recognizer != "glintr100.onnx" {
+                            match crate::models_fetch::fetch_glintr100(&dir) {
+                                Ok(()) => {
+                                    if let Some(upgraded) = faces::FaceEngine::load(&dir)? {
+                                        return Ok(Some(upgraded));
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "glintr100 upgrade failed ({e:#}) — staying on {}",
+                                        engine.recognizer
+                                    );
+                                }
+                            }
                         }
                     }
+                    Ok(loaded)
                 }
             })
             .await
@@ -253,7 +274,28 @@ pub async fn run_server(
             match res {
                 Ok(Some(engine)) => {
                     tracing::info!("face engine ready — selfie search enabled");
+                    // swapping the recognizer invalidates every stored embedding:
+                    // wipe + re-queue so the background worker rebuilds them
+                    let marker = dir.join(".recognizer-used");
+                    let used = std::fs::read_to_string(&marker).unwrap_or_default();
+                    let now_rec = engine.recognizer.clone();
                     let _ = st.face_engine.set(faces::EngineState::Ready(Arc::new(engine)));
+                    if used.trim() != now_rec {
+                        let _ = sqlx::query("DELETE FROM faces").execute(&st.pool).await;
+                        if let Ok(r) = sqlx::query(
+                            "UPDATE photos SET face_status='queued' WHERE status='ready' \
+                             AND face_status IN ('done','queued','processing','unavailable')",
+                        )
+                        .execute(&st.pool)
+                        .await
+                        {
+                            tracing::info!(
+                                "recognizer changed ({used} → {now_rec}): re-indexing {} photos",
+                                r.rows_affected()
+                            );
+                        }
+                        let _ = std::fs::write(&marker, &now_rec);
+                    }
                     if let Ok(r) = sqlx::query(
                         "UPDATE photos SET face_status='queued' WHERE face_status='unavailable'",
                     )

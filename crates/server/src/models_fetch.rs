@@ -59,6 +59,34 @@ pub fn fetch_models(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Download the stronger recognizer (glintr100, from the antelopev2 pack)
+/// for installs that started with buffalo_l — one-time ~360 MB upgrade.
+pub fn fetch_glintr100(dir: &Path) -> Result<()> {
+    std::fs::create_dir_all(dir)?;
+    if dir.join("glintr100.onnx").exists() {
+        return Ok(());
+    }
+    let url = "https://github.com/deepinsight/insightface/releases/download/v0.7/antelopev2.zip";
+    println!("⇣ downloading upgraded face recognizer glintr100 (~360 MB, one time)");
+    let zip_path = dir.join("antelopev2.zip");
+    download(url, &zip_path)
+        .with_context(|| "downloading antelopev2.zip")?;
+    let f = std::fs::File::open(&zip_path)?;
+    let mut zip = zip::ZipArchive::new(f)?;
+    let mut entry = zip
+        .by_name("glintr100.onnx")
+        .context("glintr100.onnx missing in antelopev2.zip")?;
+    let tmp = dir.join("glintr100.onnx.part");
+    let mut out = std::fs::File::create(&tmp)?;
+    std::io::copy(&mut entry, &mut out)?;
+    drop(entry);
+    drop(zip);
+    let _ = std::fs::remove_file(&zip_path);
+    std::fs::rename(&tmp, dir.join("glintr100.onnx"))?;
+    println!("✓ glintr100 ready — selfie search will use it after restart");
+    Ok(())
+}
+
 fn download(url: &str, dest: &Path) -> Result<u64> {
     let resp = ureq::get(url)
         // covers slow links for the ~280 MB archive
