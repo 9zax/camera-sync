@@ -216,6 +216,7 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
         .route("/r/machine/info", get(machine_info))
         .route("/r/line/start", get(line_web_start))
         .route("/r/line/me", get(line_me_page))
+        .route("/r/line/session", get(line_session))
         .route("/r/admin", get(admin_page))
         .route("/r/admin/login", post(admin_login))
         .route("/r/admin/logout", post(admin_logout))
@@ -1046,6 +1047,15 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 document.getElementById('coverModal').addEventListener('click',function(e){if(e.target===this)closeCover()});
 </script>"#;
+
+/// Is this browser already signed in with LINE? The landing page asks here so
+/// a returning photographer sees "งานของฉัน" instead of the login button.
+async fn line_session(State(st): State<SharedHub>, headers: HeaderMap) -> Response {
+    match web_session_user(&st, &headers).await {
+        Some(username) => Json(serde_json::json!({ "logged_in": true, "username": username })).into_response(),
+        None => Json(serde_json::json!({ "logged_in": false })).into_response(),
+    }
+}
 
 /// "งานของฉัน" — every guest QR this photographer has created, straight
 /// from the hub's live slug map (their machine announces them).

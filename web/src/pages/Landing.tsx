@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   motion,
@@ -133,6 +133,16 @@ export default function Landing() {
   const { scrollYProgress, scrollY } = useScroll()
   const progress = useSpring(scrollYProgress, { stiffness: 120, damping: 24, mass: 0.4 })
 
+  // The hub keeps the LINE session in a cookie the SPA never reads, so a
+  // returning photographer used to be shown the login button again. Ask the hub.
+  const [loggedIn, setLoggedIn] = useState(false)
+  useEffect(() => {
+    if (!onHub) return
+    fetch("/r/line/session", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setLoggedIn(Boolean(d?.logged_in)))
+      .catch(() => {})
+  }, [])
 
   return (
     <div className="min-h-dvh">
@@ -171,11 +181,19 @@ export default function Landing() {
               <span className="absolute -bottom-1 left-0 h-px w-0 bg-gold transition-all duration-300 group-hover:w-full" />
             </a>
             {onHub ? (
-              <Button asChild size="sm" variant="outline" className="rounded-md border-[var(--rule-strong)] px-5 transition-all hover:-translate-y-0.5">
-                <a href="/r/line/start">
-                  เข้าสู่ระบบด้วย LINE <ArrowRight className="size-4" />
-                </a>
-              </Button>
+              loggedIn ? (
+                <Button asChild size="sm" className="rounded-md px-5 transition-all hover:-translate-y-0.5">
+                  <a href="/r/line/me">
+                    <Images className="mr-2 size-4" /> งานของฉัน <ArrowRight className="size-4" />
+                  </a>
+                </Button>
+              ) : (
+                <Button asChild size="sm" variant="outline" className="rounded-md border-[var(--rule-strong)] px-5 transition-all hover:-translate-y-0.5">
+                  <a href="/r/line/start">
+                    เข้าสู่ระบบด้วย LINE <ArrowRight className="size-4" />
+                  </a>
+                </Button>
+              )
             ) : (
               <Button asChild size="sm" className="rounded-md px-5 transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_48px_oklch(2%_0.004_95/0.4)]">
                 <Link to="/admin">
