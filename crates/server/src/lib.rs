@@ -16,6 +16,7 @@ pub mod likes;
 pub mod models_fetch;
 pub mod photos;
 pub mod pipeline;
+pub mod quota;
 pub mod relay;
 pub mod util;
 

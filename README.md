@@ -28,7 +28,7 @@
 ```
 
 - **เครื่องช่างภาพ**: desktop app embed server ทั้งตัว (SQLite + รูป + โมเดล) + tunnel client
-- **Hub**: เก็บแค่บัญชี + ตาราง slug→tunnel ทุก request ของแขกถูกส่งต่อไปเครื่องช่างภาพแบบ realtime — **zero photo storage by design** (ไม่มีโค้ดสายใดเขียน bytes ภาพลงดิสก์ แม้ media directory ยังไม่ถูกสร้าง)
+- **Hub**: เก็บแค่บัญชี + ตาราง slug→tunnel + ตัวนับโควตาค้นหาใบหน้า ทุก request ของแขกถูกส่งต่อไปเครื่องช่างภาพแบบ realtime — **zero photo storage by design** (ไม่มีโค้ดสายใดเขียน bytes ภาพลงดิสก์ แม้ media directory ยังไม่ถูกสร้าง)
 - แขกได้ลิงก์สวย `https://hub/e/{event-slug}/` ไม่เห็นความซับซ้อนใด ๆ
 - เครื่องช่างภาพออฟไลน์? hub แสดงหน้า "เครื่องช่างภาพออฟไลน์" และเชื่อมใหม่อัตโนมัติเมื่อกลับมา
 
@@ -151,7 +151,7 @@ POST /api/agent/login                  GET|POST /api/events … PATCH/DELETE /ap
 POST /api/events/{id}/token|photos     GET /api/events/{id}/qr.png|download.zip
 GET  /api/photos/{id}/file?variant=…   DELETE /api/photos/{id}
 GET  /api/g/{slug}/info|photos|summary POST /api/g/{slug}/unlock
-POST /api/g/{slug}/faces/search        (multipart selfie — ไม่ถูกเก็บ)
+POST /api/g/{slug}/faces/search        (multipart selfie — ไม่ถูกเก็บ · คิดโควตาที่ hub)
 POST /api/g/{slug}/faces/download      (zip รูปที่เจอ หรือรูปที่กดชอบ)
 GET  /api/g/{slug}/qr.png?base=…       (QR สำหรับจอใหญ่ — ต้องผ่าน PIN ถ้างานมี PIN)
 GET|POST /api/g/{slug}/guestbook       (รายการ/ฝากคำอวยพร — 8 วิต่อคน)

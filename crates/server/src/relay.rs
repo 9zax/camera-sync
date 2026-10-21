@@ -6,6 +6,7 @@
 //!   (ไม่มีโค้ดสายใดเขียน bytes ลงดิสก์ มีแค่ HTTP ผ่านหน่วยความจำชั่วคราว)
 //! - ลูกค้าเปิด https://hub/e/{slug}/ → hub หา tunnel ของเครื่องช่างภาพที่มีงานนั้น
 //!   แล้ว proxy ทุกอย่าง (รวม face search) ไปยังเครื่องนั้นแบบ realtime
+//! - face search คิดโควตาที่ hub (โทเคนต่อบัญชีช่างภาพ — ดู quota.rs)
 //! - รองรับ legacy: /t/{id}/… (ไม่ต้องมีบัญชี) และ LAN ตรง (ไม่ผ่าน hub เลย)
 
 use std::collections::HashMap;
@@ -218,6 +219,7 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
         .route("/r/admin", get(admin_page))
         .route("/r/admin/login", post(admin_login))
         .route("/r/admin/logout", post(admin_logout))
+        .route("/r/admin/quota", post(admin_quota))
         .route("/r/line/slugs", get(line_my_slugs))
         .route("/r/qr/{slug}", get(line_qr_png))
         .route("/r/connect/{id}", get(ws_connect))
@@ -343,6 +345,15 @@ struct Credentials {
 
 fn tunnel_id_for(username: &str) -> String {
     format!("u-{}", crate::util::slugify(username))
+}
+
+/// Ids we mint are slugified; a legacy `/t/{id}` machine chooses its own, so
+/// anything outside this set must never be interpolated into page script.
+fn is_safe_account(id: &str) -> bool {
+    (3..=64).contains(&id.len())
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 async fn register(
@@ -544,6 +555,33 @@ async fn admin_logout() -> Response {
     res
 }
 
+#[derive(Deserialize)]
+struct QuotaReq {
+    account: String,
+    add: i64,
+}
+
+/// Top up a photographer account's face-search tokens (admin only).
+async fn admin_quota(
+    State(st): State<SharedHub>,
+    headers: HeaderMap,
+    Json(req): Json<QuotaReq>,
+) -> Response {
+    if is_admin_session(&st, &headers).await.is_none() {
+        return crate::error::AppError::Unauthorized("ต้องเข้าสู่ระบบแอดมิน".into()).into_response();
+    }
+    if req.account.trim().is_empty() || !(1..=100_000).contains(&req.add) {
+        return crate::error::AppError::bad("ระบุ account และจำนวนโทเคนที่จะเพิ่ม (1–100000)").into_response();
+    }
+    match crate::quota::add_tokens(&st.db, req.account.trim(), req.add).await {
+        Ok(left) => Json(serde_json::json!({ "ok": true, "tokens_left": left })).into_response(),
+        Err(e) => {
+            tracing::error!("quota top-up failed: {e:#}");
+            crate::error::AppError::bad("เพิ่มโควตาไม่สำเร็จ").into_response()
+        }
+    }
+}
+
 fn admin_shell(body: &str, refresh: bool) -> String {
     format!(
         r##"<!doctype html><html lang="th"><head><meta charset="utf-8">
@@ -574,6 +612,10 @@ input{{width:100%;background:oklch(4% .004 95);border:1px solid oklch(78% 0 0/.2
 button{{margin-top:16px;width:100%;border:none;border-radius:4px;padding:12px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;background:oklch(84% .19 80.46);color:oklch(4% .004 95)}}
 .err{{color:#e08573;font-size:12.5px;margin-top:10px}}
 .top-logout{{background:transparent;color:oklch(72% 0 0);border:1px solid oklch(78% 0 0/.22);width:auto;padding:8px 14px;font-weight:500;font-size:12.5px;margin:0}}
+.tiny{{width:auto;margin:0;padding:6px 10px;font-size:11.5px;font-weight:500;background:transparent;color:oklch(84% .19 80.46);border:1px solid oklch(74% .09 82/.6);border-radius:4px}}
+.tiny:hover{{background:oklch(84% .19 80.46);color:oklch(4% .004 95)}}
+.ok{{color:oklch(70% .12 188);font-weight:600}}
+.low{{color:#e08573;font-weight:600}}
 footer{{border-top:1px solid oklch(78% 0 0/.16);margin-top:34px;padding:18px 0 30px;text-align:center;font-size:12px;color:oklch(62% 0 0)}}
 </style></head><body><div class="wrap">
 <header>
@@ -632,6 +674,15 @@ async fn admin_page(State(st): State<SharedHub>, headers: HeaderMap) -> Response
     .unwrap_or_default();
     let tunnels = st.tunnels.lock().await;
     let slug_map = st.slug_map.lock().await;
+    let quota: HashMap<String, (i64, i64)> = sqlx::query_as(
+        "SELECT account, tokens_left, used FROM face_quota",
+    )
+    .fetch_all(&st.db)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .map(|(account, left, used)| (account, (left, used)))
+    .collect();
 
     let mut rows = String::new();
     let mut online = 0usize;
@@ -664,8 +715,20 @@ async fn admin_page(State(st): State<SharedHub>, headers: HeaderMap) -> Response
             username.clone()
         };
         let created_str = chrono_trim(*created);
+        let (left, used) = quota.get(&tid).cloned().unwrap_or((crate::quota::FACE_SEARCH_GRANT, 0));
+        let near_empty = left <= 50;
+        // Legacy tunnels pick their own id, so only ids we mint can be re-emitted as script.
+        let topup = if is_safe_account(&tid) {
+            format!(" · <button class=\"tiny\" onclick=\"addTokens('{tid}')\">+1,000 โทเคน</button>")
+        } else {
+            String::new()
+        };
+        let quota_html = format!(
+            "<span class=\"{}\">{left}</span> เหลือ · {used} ใช้{topup}",
+            if near_empty { "low" } else { "ok" }
+        );
         rows.push_str(&format!(
-            "<tr><td><b>{name}</b><br><span style=\"font-size:11px;color:oklch(62% 0 0)\">{display} · สมัคร {created_str}</span></td><td class=\"{}\">{}</td><td>{}</td></tr>",
+            "<tr><td><b>{name}</b><br><span style=\"font-size:11px;color:oklch(62% 0 0)\">{display} · สมัคร {created_str}</span></td><td class=\"{}\">{}</td><td>{}</td><td class=\"slug\">{quota_html}</td></tr>",
             if is_online { "on" } else { "off" },
             if is_online { "● ออนไลน์" } else { "ออฟไลน์" },
             slugs_html,
@@ -678,8 +741,20 @@ async fn admin_page(State(st): State<SharedHub>, headers: HeaderMap) -> Response
         r#"<span class="kicker">System Admin</span>
 <h2 class="title">ช่างภาพทุกคน <b>ในหน้าเดียว</b></h2>
 <p style="color:oklch(72% 0 0);font-size:13.5px">ออนไลน์ {online} บัญชี · งานบนเว็บทั้งหมด {total_events} งาน · อัปเดตอัตโนมัติทุก 15 วินาที</p>
-<table><thead><tr><th>ช่างภาพ</th><th>สถานะเครื่อง</th><th>งาน (ลิงก์ลูกค้า)</th></tr></thead><tbody>{rows}</tbody></table>
-<p class="hint">ถ้าสถานะเป็น "ออฟไลน์" ระหว่างงาน = แอปบนเครื่องช่างภาพหลุดการเชื่อมต่อ ควรแจ้งให้เปิดแอปใหม่</p>"#
+<table><thead><tr><th>ช่างภาพ</th><th>สถานะเครื่อง</th><th>งาน (ลิงก์ลูกค้า)</th><th>โทเคนค้นหาใบหน้า</th></tr></thead><tbody>{rows}</tbody></table>
+<p class="hint">ถ้าสถานะเป็น "ออฟไลน์" ระหว่างงาน = แอปบนเครื่องช่างภาพหลุดการเชื่อมต่อ ควรแจ้งให้เปิดแอปใหม่ · โทเคนค้นหาใบหน้าเริ่มที่ {} ครั้งต่อบัญชี ลูกค้าค้นหน้า 1 ครั้ง = 1 โทเคน (+1,000 เพื่อต่ออายุ)</p>
+<script>
+async function addTokens(tid) {{
+  const r = await fetch("/r/admin/quota", {{
+    method: "POST",
+    headers: {{ "content-type": "application/json" }},
+    body: JSON.stringify({{ account: tid, add: 1000 }}),
+  }});
+  if (r.ok) location.reload();
+  else alert((await r.json().catch(() => ({{}}))).error || "เพิ่มโควตาไม่สำเร็จ");
+}}
+</script>"#,
+        crate::quota::FACE_SEARCH_GRANT,
     );
     let html = admin_shell(&body, true);
     (
@@ -1046,6 +1121,13 @@ async fn line_me_page(State(st): State<SharedHub>, headers: HeaderMap) -> Respon
     } else {
         format!("{} งาน", slugs.len())
     };
+    let (tokens_left, tokens_used) = crate::quota::usage(&st.db, &tunnel_id_for(&username))
+        .await
+        .unwrap_or((crate::quota::FACE_SEARCH_GRANT, 0));
+    let quota_line = format!(
+        "<p class=\"count\">ค้นหาด้วยใบหน้า: เหลือ <b>{tokens_left}</b> จาก {} ครั้ง · ใช้ไปแล้ว {} ครั้ง</p>",
+        crate::quota::FACE_SEARCH_GRANT, tokens_used
+    );
     let html = format!(
         r##"<!doctype html><html lang="th"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1119,6 +1201,7 @@ footer a{{color:oklch(72% 0 0)}}
 <span class="kicker">My Events</span>
 <h2 class="title">QR ทุกงานของคุณ <em style="font-style:normal;color:oklch(84% .19 80.46)">ในหน้าเดียว</em></h2>
 <p class="count"><b>{me_count}</b> — รายการอัปเดตจากเครื่องที่เชื่อมต่ออยู่ของคุณ</p>
+{quota_line}
 <div class="grid">{cards}{empty}</div>
 <footer>CameraSync — รูปทั้งหมดอยู่บนเครื่องคุณ เราเป็นเพียงทางผ่าน · <a href="/" style="color:inherit;font-weight:600">หน้าแรก</a></footer>
 </div>{cover_ui}{reload}</body></html>"##,
@@ -1594,6 +1677,17 @@ async fn proxy(
         );
     };
 
+    // The one thing the hub meters: a guest face search costs the owning
+    // account a token. An offline machine above never reaches this line.
+    if crate::quota::is_face_search(&uri_path_query) {
+        match crate::quota::charge(&state.db, tunnel_id).await {
+            Ok(crate::quota::Charge::Charged { .. }) => {}
+            Ok(crate::quota::Charge::Exhausted { .. }) => return quota_exhausted(),
+            // a broken counter must never take a wedding gallery down
+            Err(e) => tracing::error!(tunnel = %tunnel_id, "face quota charge failed: {e:#}"),
+        }
+    }
+
     let id = format!("j{}", state.counter.fetch_add(1, Ordering::Relaxed));
     let msg = ReqMsg {
         id: id.clone(),
@@ -2013,6 +2107,18 @@ async fn hub_fallback(State(state): State<SharedHub>, req: axum::extract::Reques
         );
     };
     proxy(&state, &id, method, path, headers, bytes).await
+}
+
+/// Out of tokens. JSON (not an error page) because the guest SPA renders this
+/// message straight into the selfie-search result box.
+fn quota_exhausted() -> Response {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(serde_json::json!({
+            "error": "การค้นหาด้วยใบหน้าของอัลบั้มนี้ครบจำนวนแล้ว — รบกวนแจ้งช่างภาพเพื่อเปิดใช้อีกครั้ง"
+        })),
+    )
+        .into_response()
 }
 
 fn error_page(status: StatusCode, msg: &str) -> Response {

@@ -74,5 +74,13 @@ pub async fn init_pool(cfg: &Config) -> anyhow::Result<SqlitePool> {
     )
     .execute(&pool)
     .await?;
+    // face-search tokens — only ever written by the hub (see quota.rs)
+    sqlx::raw_sql(
+        "CREATE TABLE IF NOT EXISTS face_quota(\
+           account TEXT PRIMARY KEY, tokens_left INTEGER NOT NULL, \
+           used INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
+    )
+    .execute(&pool)
+    .await?;
     Ok(pool)
 }
