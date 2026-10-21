@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { AnimatePresence, motion } from "motion/react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import {
   ArrowLeft,
   ChevronLeft,
@@ -27,6 +27,8 @@ import {
   type PhotoList,
   type WishItem,
 } from "@/lib/api"
+import { createWallRenderer } from "@/lib/wallGL"
+import { WALL_TRANSITIONS, type WallTransition } from "@/lib/wallTransitions"
 import { formatEventDate } from "@/lib/format"
 
 const SLIDE_MS = 6500
@@ -37,6 +39,22 @@ type Slide =
   | { kind: "wish"; key: string; wish: WishItem }
 
 type WakeLockSentinelLike = { release: () => Promise<void> }
+
+/** the two frames the canvas is blending, plus where each one is in its drift */
+type Plan = {
+  fromId: string | null
+  fromStart: number
+  toId: string | null
+  toStart: number
+  transition: WallTransition | null
+}
+
+function pickTransition(previous: string | null): WallTransition {
+  const pool = WALL_TRANSITIONS.filter((t) => t.name !== previous)
+  return pool[Math.floor(Math.random() * pool.length)]
+}
+
+const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2)
 
 function tunnelPrefix(): string {
   const m = document.cookie.match(/(?:^|;\s*)cs_tunnel=([\w-]+)/)
@@ -53,6 +71,30 @@ export default function LiveWall() {
   const [fresh, setFresh] = useState(false)
   const hideTimer = useRef<number | undefined>(undefined)
   const prevCount = useRef(0)
+
+  const reduced = useReducedMotion()
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const planRef = useRef<Plan>({ fromId: null, fromStart: 0, toId: null, toStart: 0, transition: null })
+  const lastFxRef = useRef<string | null>(null)
+  const imagesRef = useRef(new Map<string, HTMLImageElement>())
+  const [glActive, setGlActive] = useState(false)
+
+  const getImage = useCallback((id: string) => {
+    const cache = imagesRef.current
+    let img = cache.get(id)
+    if (!img) {
+      img = new Image()
+      img.decoding = "async"
+      img.src = photoUrl(id, "web")
+      cache.set(id, img)
+      // decoded 2048px frames cost ~11MB each — keep only what the wall can blend
+      if (cache.size > 5) {
+        const oldest = cache.keys().next().value
+        if (oldest !== undefined && oldest !== id) cache.delete(oldest)
+      }
+    }
+    return img
+  }, [])
 
   const infoQuery = useQuery({
     queryKey: ["guest-event", slug],
@@ -97,6 +139,7 @@ export default function LiveWall() {
   }, [photos, wishesQuery.data])
 
   const slide = slides[index]
+  const wallMounted = !!info && slides.length > 0
 
   // live: a new photo jumps back to the newest frame and shows a short flash
   useEffect(() => {
@@ -122,15 +165,73 @@ export default function LiveWall() {
     return () => window.clearTimeout(t)
   }, [index, paused, slides.length])
 
-  // preload the next frame so the crossfade never waits on the network
+  // what the canvas should be blending: a hand-off starts the moment the wall
+  // moves to a different photo, and only between two photos
   useEffect(() => {
-    if (slides.length < 2) return
-    const next = slides[(index + 1) % slides.length]
-    if (next?.kind === "photo") {
-      const img = new Image()
-      img.src = photoUrl(next.photo.id, "web")
+    if (!glActive || slide?.kind !== "photo") return
+    const plan = planRef.current
+    if (plan.toId === slide.photo.id) return
+    const prev = slides[(index - 1 + slides.length) % slides.length]
+    const now = performance.now()
+    plan.fromId = plan.toId
+    plan.fromStart = plan.toStart
+    plan.toId = slide.photo.id
+    plan.toStart = now
+    const canBlend = !!plan.fromId && plan.fromId !== slide.photo.id && prev?.kind === "photo"
+    plan.transition = canBlend ? pickTransition(lastFxRef.current) : null
+    if (plan.transition) lastFxRef.current = plan.transition.name
+  }, [slide, index, slides, glActive])
+
+  useEffect(() => {
+    // the canvas only exists once the wall has something to show — re-run when it mounts
+    if (!wallMounted) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const handle = createWallRenderer(canvas)
+    if (!handle) return // no WebGL — the DOM slides below take over
+    setGlActive(true)
+
+    let raf = 0
+    const loop = (now: number) => {
+      raf = requestAnimationFrame(loop)
+      const plan = planRef.current
+      if (!plan.toId) return
+      if (!handle.prepare(plan.toId, getImage(plan.toId))) return // still decoding
+      if (plan.fromId) handle.prepare(plan.fromId, getImage(plan.fromId))
+      const duration = plan.transition?.durationMs ?? 0
+      const elapsed = duration > 0 ? now - plan.toStart : duration
+      const progress = reduced || !duration ? 1 : Math.min(1, easeInOut(elapsed / duration))
+      const drift = (since: number) => (reduced ? 0 : Math.min(1, (now - since) / SLIDE_MS))
+      handle.render(
+        plan.fromId,
+        plan.toId,
+        progress >= 1 ? 0 : progress,
+        drift(plan.fromStart),
+        drift(plan.toStart),
+        plan.transition,
+      )
+      if (progress >= 1) plan.fromId = null
+      handle.prune([plan.toId, plan.fromId])
     }
-  }, [index, slides])
+    raf = requestAnimationFrame(loop)
+
+    const onResize = () => handle.resize()
+    window.addEventListener("resize", onResize)
+    document.addEventListener("fullscreenchange", onResize)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener("resize", onResize)
+      document.removeEventListener("fullscreenchange", onResize)
+      handle.dispose()
+    }
+  }, [getImage, reduced, wallMounted])
+
+  // the DOM fallback still warms up the next frame so its crossfade stays smooth
+  useEffect(() => {
+    if (glActive || slides.length < 2) return
+    const upcoming = slides[(index + 1) % slides.length]
+    if (upcoming?.kind === "photo") getImage(upcoming.photo.id)
+  }, [index, slides, glActive, getImage])
 
   const poke = useCallback(() => {
     setShowUi(true)
@@ -292,22 +393,31 @@ export default function LiveWall() {
       onMouseMove={poke}
       onClick={poke}
     >
-      {/* slides */}
+      {/* photos — WebGL canvas: slow drift + shader hand-off */}
+      <canvas
+        ref={canvasRef}
+        aria-hidden
+        className={`absolute inset-0 h-full w-full ${glActive ? "block" : "hidden"}`}
+      />
+
+      {/* wishes (and photos on devices without WebGL) stay in the DOM */}
       <AnimatePresence mode="sync">
-        <motion.div
-          key={slide?.key ?? "empty"}
-          className="absolute inset-0"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 1.1, ease: "easeInOut" }}
-        >
-          {slide?.kind === "photo" ? (
-            <PhotoSlide photo={slide.photo} />
-          ) : slide?.kind === "wish" ? (
-            <WishSlide wish={slide.wish} />
-          ) : null}
-        </motion.div>
+        {(slide?.kind === "wish" || !glActive) && (
+          <motion.div
+            key={slide?.key ?? "empty"}
+            className="absolute inset-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.1, ease: "easeInOut" }}
+          >
+            {slide?.kind === "photo" ? (
+              <PhotoSlide photo={slide.photo} />
+            ) : slide?.kind === "wish" ? (
+              <WishSlide wish={slide.wish} />
+            ) : null}
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* cinematic grade */}
