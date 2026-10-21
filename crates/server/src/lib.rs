@@ -10,6 +10,7 @@ pub mod events;
 pub mod faces;
 pub mod ftp;
 pub mod guest;
+pub mod guestbook;
 pub mod importer;
 pub mod likes;
 pub mod models_fetch;
@@ -391,7 +392,7 @@ pub type SharedState = Arc<AppState>;
 
 async fn serve_http(state: SharedState, port: u16) -> anyhow::Result<()> {
     use axum::extract::DefaultBodyLimit;
-    use axum::routing::{delete, get, post};
+    use axum::routing::{delete, get, patch, post};
 
     let routes = axum::Router::new()
         .route("/api/health", get(|| async { axum::Json(serde_json::json!({"ok": true})) }))
@@ -422,12 +423,20 @@ async fn serve_http(state: SharedState, port: u16) -> anyhow::Result<()> {
         .route("/api/m/{slug}/cover", post(events::machine_cover))
         .route("/api/m/{slug}/photos", get(events::machine_photos))
         .route("/api/events/{id}/download.zip", get(photos::download_zip))
+        .route("/api/events/{id}/guestbook", get(guestbook::admin_list))
+        .route(
+            "/api/events/{id}/guestbook/{wish}",
+            patch(guestbook::admin_hide).delete(guestbook::admin_delete),
+        )
         .route("/api/photos/{id}", delete(photos::delete_one))
         .route("/api/photos/{id}/file", get(photos::serve_file))
         .route("/api/g/{slug}/info", get(guest::info))
         .route("/api/g/{slug}/unlock", post(guest::unlock))
         .route("/api/g/{slug}/summary", get(guest::summary))
         .route("/api/g/{slug}/photos", get(guest::photos))
+        .route("/api/g/{slug}/photos/download", post(guest::face_download_zip))
+        .route("/api/g/{slug}/qr.png", get(guest::qr_png))
+        .route("/api/g/{slug}/guestbook", get(guestbook::guest_list).post(guestbook::create))
         .route("/api/g/{slug}/faces/search", post(guest::face_search))
         .route("/api/g/{slug}/faces/download", post(guest::face_download_zip))
         .route("/api/g/{slug}/likes", get(likes::list).post(likes::set));

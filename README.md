@@ -4,7 +4,7 @@
 
 ![Architecture](docs/arch.png)
 
-**Drive รูปงานแต่งหนึ่งงานหนึ่งแหล่ง**: sync จากเครื่องช่างภาพแบบใกล้เรียลไทม์ → แขกสแกน QR ดูรูปสดระหว่างงาน → ถ่ายเซลฟี่เพื่อค้นหารูปของตัวเอง (AI face search)
+**Drive รูปงานแต่งหนึ่งงานหนึ่งแหล่ง**: sync จากเครื่องช่างภาพแบบใกล้เรียลไทม์ → แขกสแกน QR ดูรูปสดระหว่างงาน → ถ่ายเซลฟี่เพื่อค้นหารูปของตัวเอง (AI face search) → ฝากคำอวยพรและขึ้นจอใหญ่หน้าเวที
 
 ## Hub กับเครื่องช่างภาพ "คุยกันยังไง"
 
@@ -138,9 +138,10 @@ cd web && npm install && npm run build && cd ..
 | หน้า | ผู้ใช้ | ทำอะไร |
 |---|---|---|
 | `/` | — | หน้า features (เน้นฟีเจอร์ล้วน) |
-| `/e/{slug}` | แขก | แกลเลอรีสด + lightbox (ลากลงปิดได้) + แท็บ "หารูปตัวเอง" (กล้องเซลฟี่/อัปโหลด → ผลพร้อม % → ดาวน์โหลด .zip) |
+| `/e/{slug}` | แขก | แกลเลอรีสด + lightbox (ลากลงปิดได้) + แท็บ "หารูปตัวเอง" (กล้องเซลฟี่/อัปโหลด → ผลพร้อม % → ดาวน์โหลด .zip) + แท็บ "คำอวยพร" + ดาวน์โหลดรูปที่กดชอบเป็น .zip + ลิงก์ไปโหมดจอใหญ่ |
+| `/e/{slug}/wall` | ทีวี/โปรเจกเตอร์ในงาน | **Live Wall** — สไลด์รูปใหม่เองทุก 6.5 วิ (Ken Burns), คำอวยพรคั่นเป็นระยะ, QR ให้แขกสแกน, กันจอดับ (Wake Lock), คีย์ลัด Space/←/→/F |
 | `/admin` | ช่างภาพ | ตั้ง user/pass รอบแรก / สร้างงาน / ติดตามสถานะประมวลผลสด |
-| `/admin/events/{id}` | ช่างภาพ | Dropzone, คำสั่ง agent พร้อม copy, QR (tunnel-aware), ตั้งค่า PIN/slug/face search, zip ทั้งงาน |
+| `/admin/events/{id}` | ช่างภาพ | Dropzone, คำสั่ง agent พร้อม copy, QR (tunnel-aware), ตั้งค่า PIN/slug/face search/สมุดอวยพร, โมเดรายคำอวยพร (ซ่อน/ลบ), ลิงก์จอใหญ่, zip ทั้งงาน |
 
 ## API สำคัญ
 
@@ -151,7 +152,11 @@ POST /api/events/{id}/token|photos     GET /api/events/{id}/qr.png|download.zip
 GET  /api/photos/{id}/file?variant=…   DELETE /api/photos/{id}
 GET  /api/g/{slug}/info|photos|summary POST /api/g/{slug}/unlock
 POST /api/g/{slug}/faces/search        (multipart selfie — ไม่ถูกเก็บ)
-POST /api/g/{slug}/faces/download      (zip รูปที่เจอ)
+POST /api/g/{slug}/faces/download      (zip รูปที่เจอ หรือรูปที่กดชอบ)
+GET  /api/g/{slug}/qr.png?base=…       (QR สำหรับจอใหญ่ — ต้องผ่าน PIN ถ้างานมี PIN)
+GET|POST /api/g/{slug}/guestbook       (รายการ/ฝากคำอวยพร — 8 วิต่อคน)
+GET  /api/events/{id}/guestbook        (admin เห็นทั้งหมดรวมที่ซ่อน)
+PATCH|DELETE /api/events/{id}/guestbook/{wish}
 relay: ws://…/r/connect/{id} + http…/t/{id}/…
 ```
 
@@ -168,7 +173,7 @@ relay: ws://…/r/connect/{id} + http…/t/{id}/…
 ## งานวิจัยและแผน
 
 - [docs/RESEARCH.md](docs/RESEARCH.md) — ภูมิทัศน์ตลาด (Pixieset/Wedibox/Waldo/Memzo/SiKram…)
-- [docs/COMPETITIVE-EDGE.md](docs/COMPETITIVE-EDGE.md) — ตาราง "ข้อด้อยของเขา → จุดแข็งของเรา" + roadmap ยืมจุดแข็งกลับ (guestbook, guest upload, LINE push)
+- [docs/COMPETITIVE-EDGE.md](docs/COMPETITIVE-EDGE.md) — ตาราง "ข้อด้อยของเขา → จุดแข็งของเรา" + roadmap (guestbook/Live Wall/favorites zip = built แล้ว; guest upload, LINE push ยังอยู่ในแผน)
 - [docs/rea/](docs/rea/) — รายงาน reverse engineering จริงของ memzo.ai / wedibox.com / guestpix.com
 
 ## โครงสร้างโค้ด

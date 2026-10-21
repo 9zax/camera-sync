@@ -65,6 +65,7 @@ export interface EventInfo {
   event_date: string
   photo_count: number
   face_enabled: boolean
+  guestbook_enabled: boolean
   pin_required: boolean
   cover_photo_id?: string | null
 }
@@ -85,7 +86,22 @@ export interface AdminEvent {
   ready: number
   pending: number
   faces_done: number
+  wishes: number
+  guestbook_enabled: number
   cover_photo_id?: string | null
+}
+
+export interface WishItem {
+  id: string
+  guest_name: string
+  message: string
+  hidden?: number
+  created_at: number
+}
+
+export interface WishList {
+  items: WishItem[]
+  total: number
 }
 
 export interface FaceSearchResult {
@@ -112,6 +128,23 @@ export function setLike(
     guest_id: guestId,
     photo_id: photoId,
     liked,
+  })
+}
+
+export function listWishes(slug: string): Promise<WishList> {
+  return api.get(`/api/g/${encodeURIComponent(slug)}/guestbook`)
+}
+
+export function postWish(
+  slug: string,
+  guestId: string,
+  guestName: string,
+  message: string,
+): Promise<{ item: WishItem }> {
+  return api.post(`/api/g/${encodeURIComponent(slug)}/guestbook`, {
+    guest_id: guestId,
+    guest_name: guestName,
+    message,
   })
 }
 

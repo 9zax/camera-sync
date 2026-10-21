@@ -1,20 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { AnimatePresence, motion, useAnimate, useAnimationFrame, useMotionValue, useReducedMotion, type Variants } from "motion/react"
-import { CalendarDays, Heart, Images, Loader2, Lock, ScanFace, Sparkles } from "lucide-react"
+import { AnimatePresence, motion, useAnimationFrame, useMotionValue, useReducedMotion, type Variants } from "motion/react"
+import { CalendarDays, Download, Heart, Images, Loader2, MessageSquareHeart, MonitorPlay, ScanFace, Sparkles } from "lucide-react"
 import { LogoMark } from "@/components/Logo"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { GalleryGrid, GallerySkeleton } from "@/components/GalleryGrid"
 import type { PhotoItem } from "@/lib/api"
 import { Lightbox } from "@/components/Lightbox"
 import { SelfieSearch } from "@/components/SelfieSearch"
-import { api, listLikes, photoUrl, setLike, type EventInfo, type PhotoList } from "@/lib/api"
+import { Guestbook } from "@/components/Guestbook"
+import { PinGate } from "@/components/PinGate"
+import {
+  api,
+  downloadZip,
+  listLikes,
+  photoUrl,
+  setLike,
+  type EventInfo,
+  type PhotoList,
+} from "@/lib/api"
 import { formatEventDate } from "@/lib/format"
 
 /** Stable per-device guest id for likes — randomUUID needs a secure context,
@@ -172,6 +180,7 @@ export default function GuestEvent() {
   const [newPhotos, setNewPhotos] = useState(0)
   const [likedOnly, setLikedOnly] = useState(false)
   const [likedIds, setLikedIds] = useState<Set<string>>(() => new Set())
+  const [downloading, setDownloading] = useState(false)
   const [guestId] = useState(() => {
     try {
       const key = `cs-guest-id:${slug}`
@@ -241,6 +250,22 @@ export default function GuestEvent() {
     () => (likedOnly ? photos.filter((p) => likedIds.has(p.id)) : photos),
     [photos, likedOnly, likedIds],
   )
+
+  const downloadFavorites = async () => {
+    if (likedIds.size === 0 || downloading) return
+    setDownloading(true)
+    try {
+      await downloadZip(
+        `/api/g/${encodeURIComponent(slug)}/photos/download`,
+        { photo_ids: [...likedIds] },
+        `${slug}-favorites.zip`,
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "ดาวน์โหลดไม่สำเร็จ")
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   // live "new photos" pill when the total grows between polls
   const prevTotal = useRef<number | null>(null)
@@ -330,6 +355,13 @@ export default function GuestEvent() {
           className="pointer-events-none absolute -right-6 top-8 size-44 rotate-12 text-primary/[0.05]"
           aria-hidden
         />
+        <Link
+          to={`/e/${encodeURIComponent(slug)}/wall`}
+          title="เปิดโหมดจอใหญ่สำหรับจอในงาน"
+          className="absolute right-4 top-4 z-20 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-xs font-medium text-white/85 backdrop-blur transition-colors hover:bg-black/55 hover:text-white"
+        >
+          <MonitorPlay className="size-3.5 text-gold" /> โหมดจอใหญ่
+        </Link>
         <motion.div
           className="relative mx-auto max-w-6xl px-5 pb-8 pt-12 text-center"
           variants={stagger}
@@ -393,13 +425,22 @@ export default function GuestEvent() {
             transition={{ delay: 0.25, duration: 0.4 }}
           >
             {/* base TabsList forces h-9 via this group variant; override with the same variant so pills (h-10) fit the track */}
-            <TabsList className="mx-auto mb-8 grid w-full max-w-md grid-cols-2 rounded-full border border-border/70 bg-secondary/60 p-1 shadow-sm group-data-[orientation=horizontal]/tabs:h-auto">
-              <TabsTrigger value="gallery" className="h-10 rounded-full font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]">
-                <Images className="mr-2 size-4" /> แกลเลอรี
+            <TabsList
+              className={`mx-auto mb-8 grid w-full rounded-full border border-border/70 bg-secondary/60 p-1 shadow-sm group-data-[orientation=horizontal]/tabs:h-auto ${
+                info.guestbook_enabled ? "max-w-lg grid-cols-3" : "max-w-md grid-cols-2"
+              }`}
+            >
+              <TabsTrigger value="gallery" className="h-10 rounded-full px-2 font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]">
+                <Images className="mr-1.5 size-4" /> แกลเลอรี
               </TabsTrigger>
-              <TabsTrigger value="me" className="h-10 rounded-full font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]" disabled={!info.face_enabled}>
-                <ScanFace className="mr-2 size-4" /> หารูปตัวเอง
+              <TabsTrigger value="me" className="h-10 rounded-full px-2 font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]" disabled={!info.face_enabled}>
+                <ScanFace className="mr-1.5 size-4" /> หารูปตัวเอง
               </TabsTrigger>
+              {info.guestbook_enabled && (
+                <TabsTrigger value="wishes" className="h-10 rounded-full px-2 font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]">
+                  <MessageSquareHeart className="mr-1.5 size-4" /> คำอวยพร
+                </TabsTrigger>
+              )}
             </TabsList>
           </motion.div>
         </Tabs>
@@ -414,7 +455,7 @@ export default function GuestEvent() {
           >
             {tab === "gallery" ? (
               <>
-                <div className="mb-6 flex justify-center">
+                <div className="mb-6 flex flex-wrap items-center justify-center gap-2">
                   <motion.button
                     onClick={() => setLikedOnly((v) => !v)}
                     whileTap={{ scale: 0.96 }}
@@ -434,6 +475,20 @@ export default function GuestEvent() {
                     {likedIds.size > 0 && (
                       <span className="font-mono text-xs text-muted-foreground">{likedIds.size}</span>
                     )}
+                  </motion.button>
+                  <motion.button
+                    onClick={downloadFavorites}
+                    disabled={likedIds.size === 0 || downloading}
+                    whileTap={{ scale: 0.96 }}
+                    title="ดาวน์โหลดรูปที่กดหัวใจไว้เป็นไฟล์ .zip"
+                    className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-secondary/60 px-4 py-2 text-sm font-medium text-muted-foreground transition-all hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
+                  >
+                    {downloading ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Download className="size-4" />
+                    )}
+                    ดาวน์โหลดที่ชอบ
                   </motion.button>
                 </div>
                 {!likedOnly && (
@@ -473,6 +528,8 @@ export default function GuestEvent() {
                   />
                 )}
               </>
+            ) : tab === "wishes" && info.guestbook_enabled ? (
+              <Guestbook slug={slug} guestId={guestId} />
             ) : info.face_enabled ? (
               <SelfieSearch slug={slug} />
             ) : (
@@ -573,85 +630,5 @@ function EmptyGallery() {
         ช่างภาพกำลังถ่ายและอัปโหลดอยู่ — พักดื่มน้ำแป๊บเดียว แล้วรีเฟรชดูได้เลย รูปจะขึ้นเอง
       </p>
     </motion.div>
-  )
-}
-
-function PinGate({
-  slug,
-  title,
-  onUnlocked,
-}: {
-  slug: string
-  title: string
-  onUnlocked: () => void
-}) {
-  const [pin, setPin] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [scope, animate] = useAnimate()
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!pin.trim()) return
-    setLoading(true)
-    try {
-      await api.post(`/api/g/${encodeURIComponent(slug)}/unlock`, { pin })
-      toast.success("ปลดล็อกสำเร็จ")
-      onUnlocked()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "PIN ไม่ถูกต้อง")
-      void animate(
-        scope.current,
-        { x: [0, -14, 14, -9, 9, -4, 0] },
-        { duration: 0.5, ease: "easeInOut" },
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="flex min-h-dvh items-center justify-center px-5">
-      <motion.div
-        ref={scope}
-        initial={{ opacity: 0, y: 28, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ type: "spring", stiffness: 220, damping: 24 }}
-        className="w-full max-w-sm"
-      >
-        <Card>
-          <CardContent className="pt-8 text-center">
-            <motion.span
-              className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/10"
-              animate={{ scale: [1, 1.06, 1] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <Lock className="size-6 text-primary" />
-            </motion.span>
-            <h1 className="font-display text-xl font-semibold">{title}</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              งานนี้ตั้งรหัส PIN กันคนนอก — ใส่รหัสที่ได้จากคู่สมรสหรือโต๊ะลงทะเบียน
-            </p>
-            <form onSubmit={submit} className="mt-6 space-y-3">
-              <Input
-                type="text"
-                inputMode="numeric"
-                autoFocus
-                placeholder="PIN"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                className="h-12 text-center text-lg tracking-[0.4em]"
-              />
-              <Button type="submit" disabled={loading} className="h-11 w-full rounded-full">
-                {loading ? <Loader2 className="size-4 animate-spin" /> : "เข้าชมแกลเลอรี"}
-              </Button>
-            </form>
-            <Separator className="my-6" />
-            <Link to="/" className="text-xs text-muted-foreground hover:text-foreground">
-              ← CameraSync
-            </Link>
-          </CardContent>
-        </Card>
-      </motion.div>
-    </div>
   )
 }

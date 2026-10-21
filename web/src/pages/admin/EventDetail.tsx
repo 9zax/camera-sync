@@ -9,9 +9,13 @@ import {
   Copy,
   Download,
   ExternalLink,
+  Eye,
+  EyeOff,
   FileWarning,
   KeyRound,
   Loader2,
+  MessageSquareHeart,
+  MonitorPlay,
   QrCode,
   ScanFace,
   Settings2,
@@ -36,7 +40,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { api, photoUrl, uploadFiles, type AdminEvent, type PhotoList } from "@/lib/api"
+import {
+  api,
+  photoUrl,
+  uploadFiles,
+  type AdminEvent,
+  type PhotoList,
+  type WishItem,
+  type WishList,
+} from "@/lib/api"
+import { timeAgo } from "@/lib/format"
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>()
@@ -109,6 +122,11 @@ export default function EventDetail() {
                   <ScanFace className="size-3.5 text-primary" /> หน้า {ev.faces_done.toLocaleString("th-TH")}
                 </Badge>
               )}
+              {ev.wishes > 0 && (
+                <Badge variant="secondary" className="gap-1.5 rounded-full px-3 py-1">
+                  <MessageSquareHeart className="size-3.5 text-primary" /> อวยพร {ev.wishes.toLocaleString("th-TH")}
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -119,6 +137,9 @@ export default function EventDetail() {
           <TabsList className="mb-8">
             <TabsTrigger value="photos">
               <CloudUpload className="mr-2 size-4" /> รูปและการอัปโหลด
+            </TabsTrigger>
+            <TabsTrigger value="wishes">
+              <MessageSquareHeart className="mr-2 size-4" /> คำอวยพร
             </TabsTrigger>
             <TabsTrigger value="share">
               <QrCode className="mr-2 size-4" /> แชร์ & QR
@@ -131,6 +152,10 @@ export default function EventDetail() {
           <TabsContent value="photos" className="space-y-6">
             <Dropzone eventId={ev.id} />
             <AdminGallery eventId={ev.id} />
+          </TabsContent>
+
+          <TabsContent value="wishes">
+            <WishesPanel ev={ev} />
           </TabsContent>
 
           <TabsContent value="share">
@@ -461,6 +486,187 @@ function SharePanel({ ev }: { ev: AdminEvent }) {
           </p>
         </CardContent>
       </Card>
+
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 font-display text-lg">
+            <MonitorPlay className="size-5 text-primary" /> โหมดจอใหญ่ (Live Wall)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center justify-between gap-4">
+          <p className="max-w-xl text-sm text-muted-foreground">
+            เปิดบนทีวี/โปรเจกเตอร์ในงาน — รูปใหม่ขึ้นจอเองทุกครั้งที่ช่างภาพอัปโหลด
+            มีคำอวยพรคั่นเป็นระยะ, QR ให้แขกสแกน และกันจอดับให้อัตโนมัติ
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild className="rounded-full">
+              <a href={`${guestUrl}wall`} target="_blank" rel="noreferrer">
+                <MonitorPlay className="mr-2 size-4" /> เปิดจอใหญ่
+              </a>
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => copy(`${guestUrl}wall`, "ลิงก์จอใหญ่")}
+            >
+              <Copy className="mr-2 size-4" /> คัดลอกลิงก์จอ
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// ---------- guestbook ----------
+
+function WishesPanel({ ev }: { ev: AdminEvent }) {
+  const eventId = ev.id
+  const qc = useQueryClient()
+  const [pendingDelete, setPendingDelete] = useState<WishItem | null>(null)
+
+  const wishesQuery = useQuery({
+    queryKey: ["event-wishes", eventId],
+    queryFn: () => api.get<WishList>(`/api/events/${eventId}/guestbook`),
+    refetchInterval: 10_000,
+  })
+  const wishes = wishesQuery.data?.items ?? []
+  const hiddenCount = wishes.filter((w) => w.hidden).length
+
+  const flashEvent = () => {
+    void qc.invalidateQueries({ queryKey: ["event-wishes", eventId] })
+    void qc.invalidateQueries({ queryKey: ["event", eventId] })
+  }
+
+  const hide = useMutation({
+    mutationFn: ({ id, hidden }: { id: string; hidden: boolean }) =>
+      api.patch(`/api/events/${eventId}/guestbook/${id}`, { hidden }),
+    onSuccess: (_data, vars) => {
+      toast.success(vars.hidden ? "ซ่อนคำอวยพรแล้ว — จะไม่ขึ้นบนจอ" : "แสดงคำอวยพรอีกครั้งแล้ว")
+      flashEvent()
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "ทำรายการไม่สำเร็จ"),
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api.del(`/api/events/${eventId}/guestbook/${id}`),
+    onSuccess: () => {
+      toast.success("ลบคำอวยพรแล้ว")
+      setPendingDelete(null)
+      flashEvent()
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "ลบไม่สำเร็จ"),
+  })
+
+  return (
+    <div>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="font-display text-lg font-semibold">
+            คำอวยพรจากแขก {wishesQuery.data ? `(${wishesQuery.data.total.toLocaleString("th-TH")})` : ""}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            ข้อความถูกเก็บในเครื่องคุณ — ซ่อนเพื่อไม่ให้ขึ้นแกลเลอรีและจอใหญ่
+            {hiddenCount > 0 ? ` · ซ่อนอยู่ ${hiddenCount}` : ""}
+          </p>
+        </div>
+        {ev.guestbook_enabled === 0 && (
+          <Badge variant="secondary" className="gap-1.5 rounded-full px-3 py-1">
+            <EyeOff className="size-3.5 text-muted-foreground" /> ปิดรับคำอวยพรอยู่ — เปิดได้ที่แท็บตั้งค่า
+          </Badge>
+        )}
+      </div>
+
+      {wishesQuery.isLoading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="size-6 animate-spin text-primary" />
+        </div>
+      ) : wishes.length === 0 ? (
+        <div className="flex flex-col items-center rounded-3xl border border-dashed border-border py-16 text-center">
+          <MessageSquareHeart className="mb-3 size-8 text-primary/70" />
+          <h3 className="font-display text-lg font-semibold">ยังไม่มีคำอวยพร</h3>
+          <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
+            เมื่อแขกเขียนคำอวยพรจากแกลเลอรี ข้อความจะมาแสดงที่นี่และบนจอใหญ่
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <AnimatePresence initial={false}>
+            {wishes.map((w) => (
+              <motion.figure
+                key={w.id}
+                layout
+                initial={{ opacity: 0, y: 16, scale: 0.97 }}
+                animate={{ opacity: w.hidden ? 0.55 : 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ type: "spring", stiffness: 260, damping: 26 }}
+                className={`relative overflow-hidden rounded-2xl border p-5 ${
+                  w.hidden ? "border-dashed border-border bg-transparent" : "border-border/70 bg-card/60"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span className="size-1.5 rounded-full bg-gold" />
+                    <span className="font-medium text-foreground/85">{w.guest_name}</span>
+                    <span aria-hidden>·</span>
+                    <span>{timeAgo(w.created_at)}</span>
+                    {w.hidden ? (
+                      <Badge variant="secondary" className="rounded-full px-2 py-0 text-[10px]">
+                        ซ่อนอยู่
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <motion.button
+                      onClick={() => hide.mutate({ id: w.id, hidden: !w.hidden })}
+                      disabled={hide.isPending}
+                      title={w.hidden ? "แสดงคำอวยพร" : "ซ่อนคำอวยพร"}
+                      className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+                      whileTap={{ scale: 0.9 }}
+                    >
+                      {w.hidden ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+                    </motion.button>
+                    <motion.button
+                      onClick={() => setPendingDelete(w)}
+                      title="ลบคำอวยพร"
+                      className="flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      whileTap={{ scale: 0.9 }}
+                    >
+                      <Trash2 className="size-4" />
+                    </motion.button>
+                  </div>
+                </div>
+                <blockquote className="mt-3 whitespace-pre-wrap font-display text-[17px] leading-relaxed">
+                  {w.message}
+                </blockquote>
+              </motion.figure>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      <Dialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>ลบคำอวยพรนี้?</DialogTitle>
+            <DialogDescription>
+              ข้อความจาก {pendingDelete?.guest_name} จะถูกลบถาวร — ถ้าแค่อยากซ่อนจากจอ ให้กดปุ่มรูปตาแทน
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:justify-start">
+            <Button
+              variant="destructive"
+              onClick={() => pendingDelete && remove.mutate(pendingDelete.id)}
+              disabled={remove.isPending}
+            >
+              {remove.isPending && <Loader2 className="mr-2 size-4 animate-spin" />} ลบถาวร
+            </Button>
+            <Button variant="ghost" onClick={() => setPendingDelete(null)}>
+              ยกเลิก
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -478,6 +684,7 @@ function SettingsPanel({ ev }: { ev: AdminEvent }) {
     slug: ev.slug,
     pin: ev.pin,
     face_enabled: ev.face_enabled === 1,
+    guestbook_enabled: ev.guestbook_enabled === 1,
   })
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -491,7 +698,8 @@ function SettingsPanel({ ev }: { ev: AdminEvent }) {
       form.event_date !== ev.event_date ||
       form.slug !== ev.slug ||
       form.pin !== ev.pin ||
-      form.face_enabled !== (ev.face_enabled === 1),
+      form.face_enabled !== (ev.face_enabled === 1) ||
+      form.guestbook_enabled !== (ev.guestbook_enabled === 1),
     [form, ev],
   )
 
@@ -566,6 +774,23 @@ function SettingsPanel({ ev }: { ev: AdminEvent }) {
               </div>
             </div>
             <Switch checked={form.face_enabled} onCheckedChange={(v) => setForm((f) => ({ ...f, face_enabled: v }))} />
+          </div>
+          <div className="flex items-center justify-between rounded-xl border border-border p-3.5">
+            <div className="flex items-center gap-2.5">
+              <MessageSquareHeart className="size-4.5 text-primary" />
+              <div>
+                <div className="text-sm font-medium">สมุดอวยพร</div>
+                <div className="text-xs text-muted-foreground">
+                  {form.guestbook_enabled
+                    ? "เปิด — แขกฝากคำอวยพรได้ และข้อความขึ้นจอ Live Wall"
+                    : "ปิด — ซ่อนแท็บคำอวยพรจากแขก (ข้อความเดิมยังอยู่ในระบบ)"}
+                </div>
+              </div>
+            </div>
+            <Switch
+              checked={form.guestbook_enabled}
+              onCheckedChange={(v) => setForm((f) => ({ ...f, guestbook_enabled: v }))}
+            />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button onClick={save} disabled={saving || !dirty} className="rounded-full">

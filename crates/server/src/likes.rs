@@ -75,13 +75,7 @@ async fn save(st: &SharedState, ev: &crate::events::Event, likes: &LikesFile) ->
     Ok(())
 }
 
-fn valid_guest_id(id: &str) -> bool {
-    !id.is_empty()
-        && id.len() <= 64
-        && id
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
-}
+use crate::util::valid_guest_id;
 
 /// Which photos has this guest liked?
 pub async fn list(

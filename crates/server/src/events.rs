@@ -20,6 +20,7 @@ pub struct Event {
     pub event_date: String,
     pub pin: String,
     pub face_enabled: i64,
+    pub guestbook_enabled: i64,
     pub upload_token: String,
     pub created_at: i64,
     pub enabled: i64,
@@ -37,15 +38,17 @@ pub struct EventWithCounts {
     pub ready: i64,
     pub pending: i64,
     pub faces_done: i64,
+    pub wishes: i64,
 }
 
 const EVENT_COLUMNS: &str =
-    "e.id, e.slug, e.title, e.partner_a, e.partner_b, e.event_date, e.pin, e.face_enabled, e.upload_token, e.created_at, e.enabled, e.cover_photo_id";
+    "e.id, e.slug, e.title, e.partner_a, e.partner_b, e.event_date, e.pin, e.face_enabled, e.guestbook_enabled, e.upload_token, e.created_at, e.enabled, e.cover_photo_id";
 const EVENT_COUNTS: &str = "\
  (SELECT COUNT(*) FROM photos p WHERE p.event_id = e.id) AS total, \
  (SELECT COUNT(*) FROM photos p WHERE p.event_id = e.id AND p.status = 'ready') AS ready, \
  (SELECT COUNT(*) FROM photos p WHERE p.event_id = e.id AND p.status IN ('queued','processing')) AS pending, \
- (SELECT COUNT(*) FROM photos p WHERE p.event_id = e.id AND p.face_status = 'done') AS faces_done";
+ (SELECT COUNT(*) FROM photos p WHERE p.event_id = e.id AND p.face_status = 'done') AS faces_done, \
+ (SELECT COUNT(*) FROM guestbook g WHERE g.event_id = e.id AND g.hidden = 0) AS wishes";
 
 pub async fn fetch_event(st: &SharedState, id: &str) -> Result<Event, AppError> {
     sqlx::query_as::<_, Event>(&format!(
@@ -205,6 +208,7 @@ pub struct UpdateReq {
     pub event_date: Option<String>,
     pub pin: Option<String>,
     pub face_enabled: Option<bool>,
+    pub guestbook_enabled: Option<bool>,
 }
 
 pub async fn update(
@@ -220,22 +224,24 @@ pub async fn update(
         }
         ev.title = t.trim().to_string();
     }
-    if let Some(s) = &req.slug {
-        let s = slugify(s);
-        if s != ev.slug {
-            let taken: Option<(String,)> = sqlx::query_as(
-                "SELECT slug FROM events WHERE slug = ?1 AND id != ?2",
-            )
-            .bind(&s)
-            .bind(&id)
-            .fetch_optional(&st.pool)
-            .await
-            .map_err(AppError::from)?;
+    if let Some(raw) = &req.slug {
+        // the settings form sends the current slug back on every save; leave it
+        // untouched unless the photographer actually edited it
+        let raw = raw.trim();
+        if !raw.is_empty() && raw != ev.slug {
+            let s = slugify(raw);
+            let taken: Option<(String,)> =
+                sqlx::query_as("SELECT slug FROM events WHERE slug = ?1 AND id != ?2")
+                    .bind(&s)
+                    .bind(&id)
+                    .fetch_optional(&st.pool)
+                    .await
+                    .map_err(AppError::from)?;
             if taken.is_some() {
                 return Err(AppError::Conflict(format!("slug '{s}' is already in use")));
             }
+            ev.slug = s;
         }
-        ev.slug = s;
     }
     if let Some(v) = &req.partner_a {
         ev.partner_a = v.trim().into();
@@ -252,6 +258,9 @@ pub async fn update(
         }
         ev.pin = v.trim().to_string();
     }
+    if let Some(v) = req.guestbook_enabled {
+        ev.guestbook_enabled = v as i64;
+    }
     let face_toggled = match req.face_enabled {
         Some(true) if ev.face_enabled == 0 => {
             ev.face_enabled = 1;
@@ -265,7 +274,8 @@ pub async fn update(
     };
 
     sqlx::query(
-        "UPDATE events SET title=?1, slug=?2, partner_a=?3, partner_b=?4, event_date=?5, pin=?6, face_enabled=?7 WHERE id=?8",
+        "UPDATE events SET title=?1, slug=?2, partner_a=?3, partner_b=?4, event_date=?5, pin=?6, \
+         face_enabled=?7, guestbook_enabled=?8 WHERE id=?9",
     )
     .bind(&ev.title)
     .bind(&ev.slug)
@@ -274,6 +284,7 @@ pub async fn update(
     .bind(&ev.event_date)
     .bind(&ev.pin)
     .bind(ev.face_enabled)
+    .bind(ev.guestbook_enabled)
     .bind(&id)
     .execute(&st.pool)
     .await
@@ -481,16 +492,10 @@ pub struct QrQuery {
     pub base: Option<String>,
 }
 
-pub async fn qr_png(
-    State(st): State<SharedState>,
-    _user: AuthUser,
-    Path(id): Path<String>,
-    Query(q): Query<QrQuery>,
-) -> ApiResult<Response> {
-    let ev = fetch_event(&st, &id).await?;
-    let mut base = q.base.unwrap_or_else(|| st.cfg.public_app_url.clone());
+pub(crate) fn qr_png_bytes(ev: &Event, base: &str) -> Result<Vec<u8>, AppError> {
+    let mut base = base.trim().to_string();
     if !base.starts_with("http://") && !base.starts_with("https://") {
-        base = st.cfg.public_app_url.clone();
+        return Err(AppError::bad("base must be an http(s) URL"));
     }
     while base.ends_with('/') {
         base.pop();
@@ -509,8 +514,11 @@ pub async fn qr_png(
     image::DynamicImage::ImageRgba8(img)
         .write_to(&mut buf, image::ImageFormat::Png)
         .map_err(|e| AppError::bad(format!("png encode failed: {e}")))?;
-    let bytes = buf.into_inner();
-    Ok((
+    Ok(buf.into_inner())
+}
+
+pub(crate) fn png_response(bytes: Vec<u8>) -> Response {
+    (
         StatusCode::OK,
         [
             (axum::http::header::CONTENT_TYPE, "image/png"),
@@ -518,7 +526,21 @@ pub async fn qr_png(
         ],
         bytes,
     )
-        .into_response())
+        .into_response()
+}
+
+pub async fn qr_png(
+    State(st): State<SharedState>,
+    _user: AuthUser,
+    Path(id): Path<String>,
+    Query(q): Query<QrQuery>,
+) -> ApiResult<Response> {
+    let ev = fetch_event(&st, &id).await?;
+    let base = q
+        .base
+        .filter(|b| b.starts_with("http://") || b.starts_with("https://"))
+        .unwrap_or_else(|| st.cfg.public_app_url.clone());
+    Ok(png_response(qr_png_bytes(&ev, &base)?))
 }
 
 // ---- machine-token guarded actions (driven from the hub's /r/line/me) ----

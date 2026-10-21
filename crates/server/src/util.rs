@@ -57,6 +57,15 @@ pub fn slugify(s: &str) -> String {
     }
 }
 
+/// Client-generated id (likes, wishes): short, opaque, header-safe.
+pub fn valid_guest_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+}
+
 pub fn parse_cookies(headers: &HeaderMap) -> HashMap<String, String> {
     let mut map = HashMap::new();
     for v in headers.get_all(axum::http::header::COOKIE) {

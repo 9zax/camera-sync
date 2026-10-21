@@ -33,6 +33,11 @@ pub async fn init_pool(cfg: &Config) -> anyhow::Result<SqlitePool> {
             .execute(&pool)
             .await?;
     }
+    if !cols.iter().any(|(name,)| name == "guestbook_enabled") {
+        sqlx::raw_sql("ALTER TABLE events ADD COLUMN guestbook_enabled INTEGER NOT NULL DEFAULT 1")
+            .execute(&pool)
+            .await?;
+    }
     let user_cols: Vec<(String,)> = sqlx::query_as("SELECT name FROM pragma_table_info('users')")
         .fetch_all(&pool)
         .await?;
@@ -46,6 +51,21 @@ pub async fn init_pool(cfg: &Config) -> anyhow::Result<SqlitePool> {
             .execute(&pool)
             .await?;
     }
+    // guest wishes — text only, on the photographer's own disk like everything else
+    sqlx::raw_sql(
+        "CREATE TABLE IF NOT EXISTS guestbook(\
+           id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE, \
+           guest_id TEXT NOT NULL DEFAULT '', guest_name TEXT NOT NULL, message TEXT NOT NULL, \
+           hidden INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)",
+    )
+    .execute(&pool)
+    .await?;
+    sqlx::raw_sql(
+        "CREATE INDEX IF NOT EXISTS idx_guestbook_event \
+         ON guestbook(event_id, hidden, created_at DESC)",
+    )
+    .execute(&pool)
+    .await?;
     // folders the photographer added in the desktop app — replayed on launch
     sqlx::raw_sql(
         "CREATE TABLE IF NOT EXISTS import_dirs(\

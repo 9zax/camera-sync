@@ -66,9 +66,31 @@ pub async fn info(
         "event_date": ev.event_date,
         "photo_count": ready,
         "face_enabled": ev.face_enabled != 0 && face_ready(&st),
+        "guestbook_enabled": ev.guestbook_enabled != 0,
         "pin_required": !ev.pin.is_empty(),
         "cover_photo_id": ev.cover_photo_id,
     })))
+}
+
+#[derive(Deserialize)]
+pub struct GuestQrQuery {
+    pub base: Option<String>,
+}
+
+/// QR for the guest link — used by the venue wall and any custom share screen.
+pub async fn qr_png(
+    State(st): State<SharedState>,
+    Path(slug): Path<String>,
+    Query(q): Query<GuestQrQuery>,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
+    let ev = event_or_404(&st, &slug).await?;
+    require_pin(&st, &ev, &headers).await?;
+    let base = q
+        .base
+        .filter(|b| b.starts_with("http://") || b.starts_with("https://"))
+        .unwrap_or_else(|| st.cfg.public_app_url.clone());
+    Ok(events::png_response(events::qr_png_bytes(&ev, &base)?))
 }
 
 #[derive(Deserialize)]
@@ -286,7 +308,8 @@ pub struct FaceDownloadReq {
     pub photo_ids: Vec<String>,
 }
 
-/// Guest: zip of web-quality versions for the photos found by face search.
+/// Guest: zip of web-quality versions for a set of photos (face-search hits
+/// or the guest's favourites). The originals stay on the photographer's disk.
 pub async fn face_download_zip(
     State(st): State<SharedState>,
     Path(slug): Path<String>,
