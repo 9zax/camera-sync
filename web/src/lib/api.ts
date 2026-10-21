@@ -63,6 +63,8 @@ export interface EventInfo {
   partner_a: string
   partner_b: string
   event_date: string
+  event_type: string
+  theme: string
   photo_count: number
   face_enabled: boolean
   guestbook_enabled: boolean
@@ -77,6 +79,8 @@ export interface AdminEvent {
   partner_a: string
   partner_b: string
   event_date: string
+  event_type: string
+  theme: string
   pin: string
   face_enabled: number
   enabled: number

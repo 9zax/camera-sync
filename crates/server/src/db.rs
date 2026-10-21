@@ -38,6 +38,18 @@ pub async fn init_pool(cfg: &Config) -> anyhow::Result<SqlitePool> {
             .execute(&pool)
             .await?;
     }
+    // Event type + gallery theme — the photographer picks a template per album,
+    // so a studio that also shoots ordinations isn't stuck with wedding wording.
+    if !cols.iter().any(|(name,)| name == "event_type") {
+        sqlx::raw_sql("ALTER TABLE events ADD COLUMN event_type TEXT NOT NULL DEFAULT 'wedding'")
+            .execute(&pool)
+            .await?;
+    }
+    if !cols.iter().any(|(name,)| name == "theme") {
+        sqlx::raw_sql("ALTER TABLE events ADD COLUMN theme TEXT NOT NULL DEFAULT 'kinpaku-gold'")
+            .execute(&pool)
+            .await?;
+    }
     let user_cols: Vec<(String,)> = sqlx::query_as("SELECT name FROM pragma_table_info('users')")
         .fetch_all(&pool)
         .await?;

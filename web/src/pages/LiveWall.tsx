@@ -28,6 +28,8 @@ import {
   type WishItem,
 } from "@/lib/api"
 import { createWallRenderer } from "@/lib/wallGL"
+import { applyTheme, getTheme, resetTheme } from "@/lib/galleryThemes"
+import { formatNames, getTemplate } from "@/lib/eventTemplates"
 import {
   easeInOut,
   pickTransition,
@@ -117,10 +119,20 @@ export default function LiveWall() {
   const photos = photosQuery.data?.items ?? []
   const totalPhotos = photosQuery.data?.total ?? photos.length
 
+  const theme = getTheme(info?.theme)
+  const tpl = getTemplate(info?.event_type)
+
+  // the wall is the same album on the projector — it wears the same theme
+  useEffect(() => {
+    if (!info) return
+    applyTheme(theme)
+    return () => resetTheme()
+  }, [theme, info])
+
   const couple = useMemo(() => {
     if (!info) return ""
-    return [info.partner_a, info.partner_b].filter(Boolean).join(" ♥ ")
-  }, [info])
+    return formatNames(tpl, info.partner_a, info.partner_b)
+  }, [info, tpl])
 
   const slides = useMemo<Slide[]>(() => {
     const wishes = wishesQuery.data?.items ?? []
@@ -317,7 +329,9 @@ export default function LiveWall() {
     return (
       <PinGate
         slug={slug}
-        title={info?.title ?? "แกลเลอรีงานแต่ง"}
+        kicker={tpl.kicker}
+        hint={tpl.pinHint}
+        title={info?.title ?? tpl.label}
         onUnlocked={() => {
           void photosQuery.refetch()
           void infoQuery.refetch()

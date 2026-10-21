@@ -64,6 +64,8 @@ pub async fn info(
         "partner_a": ev.partner_a,
         "partner_b": ev.partner_b,
         "event_date": ev.event_date,
+        "event_type": ev.event_type,
+        "theme": ev.theme,
         "photo_count": ready,
         "face_enabled": ev.face_enabled != 0 && face_ready(&st),
         "guestbook_enabled": ev.guestbook_enabled != 0,

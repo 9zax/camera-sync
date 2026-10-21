@@ -12,10 +12,14 @@ import { api } from "@/lib/api"
 export function PinGate({
   slug,
   title,
+  kicker,
+  hint,
   onUnlocked,
 }: {
   slug: string
   title: string
+  kicker?: string
+  hint?: string
   onUnlocked: () => void
 }) {
   const [pin, setPin] = useState("")
@@ -60,9 +64,14 @@ export function PinGate({
             >
               <Lock className="size-6 text-primary" />
             </motion.span>
+            {kicker && (
+              <p className="mb-2 font-mono text-[10.5px] font-medium uppercase tracking-[0.22em] text-gold">
+                {kicker}
+              </p>
+            )}
             <h1 className="font-display text-xl font-semibold">{title}</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              งานนี้ตั้งรหัส PIN กันคนนอก — ใส่รหัสที่ได้จากคู่สมรสหรือโต๊ะลงทะเบียน
+              {hint ?? "งานนี้ตั้งรหัส PIN กันคนนอก — ใส่รหัสที่ได้จากคู่สมรสหรือโต๊ะลงทะเบียน"}
             </p>
             <form onSubmit={submit} className="mt-6 space-y-3">
               <Input

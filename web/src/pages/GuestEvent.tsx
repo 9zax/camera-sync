@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { AnimatePresence, motion, useAnimationFrame, useMotionValue, useReducedMotion, type Variants } from "motion/react"
-import { CalendarDays, Download, Heart, Images, Loader2, MessageSquareHeart, MonitorPlay, ScanFace, Sparkles } from "lucide-react"
+import { AnimatePresence, motion, useAnimationFrame, useMotionValue, useReducedMotion } from "motion/react"
+import { Download, Heart, Images, Loader2, MessageSquareHeart, ScanFace, Sparkles } from "lucide-react"
 import { LogoMark } from "@/components/Logo"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -18,12 +18,13 @@ import {
   api,
   downloadZip,
   listLikes,
-  photoUrl,
   setLike,
   type EventInfo,
   type PhotoList,
 } from "@/lib/api"
-import { formatEventDate } from "@/lib/format"
+import { AlbumHero } from "@/components/guest/AlbumHero"
+import { applyTheme, getTheme, resetTheme } from "@/lib/galleryThemes"
+import { formatNames, getTemplate } from "@/lib/eventTemplates"
 
 /** Stable per-device guest id for likes — randomUUID needs a secure context,
  * production guests come in over plain http, so fall back to Math.random. */
@@ -39,15 +40,6 @@ function makeGuestId(): string {
     "g-" +
     Array.from({ length: 20 }, () => Math.floor(Math.random() * 16).toString(16)).join("")
   )
-}
-
-const stagger: Variants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } },
-}
-const riseIn: Variants = {
-  hidden: { opacity: 0, y: 22 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: [0.16, 1, 0.3, 1] } },
 }
 
 
@@ -154,7 +146,7 @@ function CoverCard({
         if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) return
         onOpen()
       }}
-      className="relative block shrink-0 cursor-grab overflow-hidden rounded-md bg-card p-1 ring-1 ring-[oklch(78% 0 0/0.16)] outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+      className="relative block shrink-0 cursor-grab overflow-hidden rounded-md bg-card p-1 ring-1 ring-border/60 outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
       style={{ width: 128, height: 160 }}
       whileHover={{ scale: 1.06 }}
       transition={{ type: "spring", stiffness: 260, damping: 24 }}
@@ -285,16 +277,36 @@ export default function GuestEvent() {
     document.title = info ? `${info.title} — CameraSync` : "CameraSync"
   }, [info])
 
+  // the photographer's two design choices for this album: wording + look
+  const theme = getTheme(info?.theme)
+  const tpl = getTemplate(info?.event_type)
+
+  useEffect(() => {
+    if (!info) return
+    applyTheme(theme)
+    return () => resetTheme()
+  }, [theme, info])
+
   const couple = useMemo(() => {
     if (!info) return ""
-    const names = [info.partner_a, info.partner_b].filter(Boolean)
-    return names.join(" ♥ ")
-  }, [info])
+    return formatNames(tpl, info.partner_a, info.partner_b)
+  }, [info, tpl])
 
   // album cover — the same photo the share card (OG) uses: the one the
   // photographer picked, falling back to the newest photo exactly like the
   // hub's /e/{slug}/cover.jpg
   const coverPhotoId = info?.cover_photo_id || photos[0]?.id
+
+  const heroPhotos = useMemo(() => {
+    if (!coverPhotoId || photos[0]?.id === coverPhotoId) return photos
+    const cover = photos.find((p) => p.id === coverPhotoId)
+    return cover ? [cover, ...photos.filter((p) => p.id !== coverPhotoId)] : photos
+  }, [photos, coverPhotoId])
+
+  const openFromHero = (photo: PhotoItem) => {
+    const idx = photos.findIndex((p) => p.id === photo.id)
+    if (idx >= 0) setLightboxIndex(idx)
+  }
 
   if (infoQuery.isLoading) {
     return (
@@ -324,98 +336,33 @@ export default function GuestEvent() {
   }
 
   if (needsPin) {
-    return <PinGate slug={slug} title={info.title} onUnlocked={() => setUnlocked(true)} />
+    return (
+        <PinGate
+          slug={slug}
+          title={info.title}
+          kicker={tpl.kicker}
+          hint={tpl.pinHint}
+          onUnlocked={() => setUnlocked(true)}
+        />
+      )
   }
 
   const live = (photosQuery.data && total > photos.length) || photosQuery.isFetching
 
   return (
-    <div className="min-h-dvh pb-16">
-      {/* header */}
-      <header className="relative overflow-hidden border-b border-border/60">
-        {coverPhotoId && (
-          <img
-            src={photoUrl(coverPhotoId, "web")}
-            alt=""
-            aria-hidden
-            loading="eager"
-            draggable={false}
-            className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
-          />
-        )}
-        <div
-          className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[oklch(7%_0.006_95/0.55)] via-[oklch(7%_0.006_95/0.75)] to-background"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute inset-0 [background-image:radial-gradient(42%_60%_at_50%_0%,oklch(84%_0.19_80.46/0.08),transparent),radial-gradient(22%_30%_at_88%_12%,oklch(70%_0.12_188/0.07),transparent)]"
-          aria-hidden
-        />
-        <Heart
-          className="pointer-events-none absolute -right-6 top-8 size-44 rotate-12 text-primary/[0.05]"
-          aria-hidden
-        />
-        <Link
-          to={`/e/${encodeURIComponent(slug)}/wall`}
-          title="เปิดโหมดจอใหญ่สำหรับจอในงาน"
-          className="absolute right-4 top-4 z-20 inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/35 px-3 py-1.5 text-xs font-medium text-white/85 backdrop-blur transition-colors hover:bg-black/55 hover:text-white"
-        >
-          <MonitorPlay className="size-3.5 text-gold" /> โหมดจอใหญ่
-        </Link>
-        <motion.div
-          className="relative mx-auto max-w-6xl px-5 pb-8 pt-12 text-center"
-          variants={stagger}
-          initial="hidden"
-          animate="show"
-        >
-          <motion.p variants={riseIn} className="mb-3 inline-flex items-center gap-3 font-mono text-[10.5px] font-medium uppercase tracking-[0.22em] text-gold">
-            <span className="h-px w-7 bg-gold/60" /> Wedding Gallery <span className="h-px w-7 bg-gold/60" />
-          </motion.p>
-          <motion.h1 variants={riseIn} className="font-display text-4xl font-semibold tracking-tight sm:text-[3.4rem] sm:leading-[1.1]">
-            {info.title}
-          </motion.h1>
-          {couple && (
-            <motion.p variants={riseIn} className="mt-3 font-display text-xl italic text-primary sm:text-2xl">
-              {couple}
-            </motion.p>
-          )}
-          {info.event_date && (
-            <motion.p variants={riseIn} className="mt-3 flex items-center justify-center gap-1.5 text-[13px] text-muted-foreground">
-              <CalendarDays className="size-4 text-gold" /> {formatEventDate(info.event_date)}
-            </motion.p>
-          )}
-          <motion.div variants={riseIn} className="mt-5 flex flex-wrap items-center justify-center gap-2.5 text-sm">
-            <span className="flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3.5 py-1.5 shadow-sm">
-              <Images className="size-4 text-primary" />
-              <AnimatePresence mode="popLayout" initial={false}>
-                <motion.span
-                  key={total}
-                  initial={{ scale: 1.45, opacity: 0.4 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.6, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 380, damping: 22 }}
-                  className="inline-block font-semibold tabular-nums"
-                >
-                  {total.toLocaleString("th-TH")}
-                </motion.span>
-              </AnimatePresence>
-              รูป
-            </span>
-            <AnimatePresence>
-              {live && (
-                <motion.span
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className="flex items-center gap-1.5 rounded-full bg-card px-3.5 py-1.5 shadow-sm"
-                >
-                  <span className="size-2 animate-live-dot rounded-full bg-emerald-500" /> อัปเดต realtime
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        </motion.div>
-      </header>
+    <div className="relative min-h-dvh pb-16">
+      <div className="theme-texture" aria-hidden />
+      {/* header — layout + wording come from the album's theme and template */}
+      <AlbumHero
+        theme={theme}
+        tpl={tpl}
+        info={info}
+        couple={couple}
+        total={total}
+        live={live}
+        photos={heroPhotos}
+        onOpen={openFromHero}
+      />
 
       <main className="mx-auto max-w-6xl px-4 pt-8 sm:px-5">
         <Tabs value={tab} onValueChange={setTab}>
@@ -430,15 +377,15 @@ export default function GuestEvent() {
                 info.guestbook_enabled ? "max-w-lg grid-cols-3" : "max-w-md grid-cols-2"
               }`}
             >
-              <TabsTrigger value="gallery" className="h-10 rounded-full px-2 font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]">
+              <TabsTrigger value="gallery" className="h-10 rounded-full px-2 font-medium data-[state=active]:gold-glow data-[state=active]:border-[var(--rule-strong)]">
                 <Images className="mr-1.5 size-4" /> แกลเลอรี
               </TabsTrigger>
-              <TabsTrigger value="me" className="h-10 rounded-full px-2 font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]" disabled={!info.face_enabled}>
+              <TabsTrigger value="me" className="h-10 rounded-full px-2 font-medium data-[state=active]:gold-glow data-[state=active]:border-[var(--rule-strong)]" disabled={!info.face_enabled}>
                 <ScanFace className="mr-1.5 size-4" /> หารูปตัวเอง
               </TabsTrigger>
               {info.guestbook_enabled && (
-                <TabsTrigger value="wishes" className="h-10 rounded-full px-2 font-medium data-[state=active]:shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)] data-[state=active]:border-[var(--rule-strong)]">
-                  <MessageSquareHeart className="mr-1.5 size-4" /> คำอวยพร
+                <TabsTrigger value="wishes" className="h-10 rounded-full px-2 font-medium data-[state=active]:gold-glow data-[state=active]:border-[var(--rule-strong)]">
+                  <MessageSquareHeart className="mr-1.5 size-4" /> {tpl.wishTab}
                 </TabsTrigger>
               )}
             </TabsList>
@@ -461,14 +408,14 @@ export default function GuestEvent() {
                     whileTap={{ scale: 0.96 }}
                     className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all ${
                       likedOnly
-                        ? "border-[var(--rule-strong)] bg-primary/15 text-foreground shadow-[0_10px_26px_-10px_oklch(84%_0.19_80.46/0.28)]"
+                        ? "border-[var(--rule-strong)] bg-primary/15 text-foreground gold-glow"
                         : "border-border/70 bg-secondary/60 text-muted-foreground hover:text-foreground"
                     }`}
                     aria-pressed={likedOnly}
                   >
                     <Heart
                       className={`size-4 ${
-                        likedOnly ? "fill-[oklch(84%_0.19_80.46)] text-[oklch(84%_0.19_80.46)]" : ""
+                        likedOnly ? "fill-gold text-gold" : ""
                       }`}
                     />
                     รูปที่ฉันถูกใจ
@@ -518,18 +465,19 @@ export default function GuestEvent() {
                     </p>
                   </motion.div>
                 ) : photos.length === 0 ? (
-                  <EmptyGallery />
+                  <EmptyGallery line={tpl.emptyLine} />
                 ) : (
                   <GalleryGrid
                     photos={displayPhotos}
                     onOpen={setLightboxIndex}
                     likedIds={likedIds}
                     onToggleLike={toggleLike}
+                    grid={theme.grid}
                   />
                 )}
               </>
             ) : tab === "wishes" && info.guestbook_enabled ? (
-              <Guestbook slug={slug} guestId={guestId} />
+              <Guestbook slug={slug} guestId={guestId} tpl={tpl} />
             ) : info.face_enabled ? (
               <SelfieSearch slug={slug} />
             ) : (
@@ -587,30 +535,22 @@ export default function GuestEvent() {
           </Link>
         </p>
         <p className="mt-2 flex items-center justify-center gap-1">
-          <Sparkles className="size-3" /> มีรูปใหม่เพิ่มเรื่อย ๆ ระหว่างงาน — เข้ามาดูใหม่ได้เลย
+          <Sparkles className="size-3" /> {tpl.footerNote}
         </p>
       </footer>
 
-      <AnimatePresence>
-        {lightboxIndex !== null && (
-          <Lightbox
-            photos={displayPhotos}
-            index={lightboxIndex}
-            onClose={() => setLightboxIndex(null)}
-            onNavigate={setLightboxIndex}
-            liked={displayPhotos[lightboxIndex] ? likedIds.has(displayPhotos[lightboxIndex].id) : false}
-            onToggleLike={() => {
-              const p = displayPhotos[lightboxIndex]
-              if (p) toggleLike(p.id)
-            }}
-          />
-        )}
-      </AnimatePresence>
+      <Lightbox
+        photos={displayPhotos}
+        index={lightboxIndex}
+        onClose={() => setLightboxIndex(null)}
+        isLiked={(id) => likedIds.has(id)}
+        onToggleLike={toggleLike}
+      />
     </div>
   )
 }
 
-function EmptyGallery() {
+function EmptyGallery({ line }: { line?: string }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -627,7 +567,7 @@ function EmptyGallery() {
       </motion.span>
       <h3 className="font-display text-xl font-semibold">ยังไม่มีรูปในแกลเลอรี</h3>
       <p className="mt-2 max-w-xs text-sm text-muted-foreground">
-        ช่างภาพกำลังถ่ายและอัปโหลดอยู่ — พักดื่มน้ำแป๊บเดียว แล้วรีเฟรชดูได้เลย รูปจะขึ้นเอง
+        {line ?? "ช่างภาพกำลังถ่ายและอัปโหลดอยู่ — พักดื่มน้ำแป๊บเดียว แล้วรีเฟรชดูได้เลย รูปจะขึ้นเอง"}
       </p>
     </motion.div>
   )

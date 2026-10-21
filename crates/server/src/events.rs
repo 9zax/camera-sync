@@ -24,6 +24,10 @@ pub struct Event {
     pub upload_token: String,
     pub created_at: i64,
     pub enabled: i64,
+    /// template id driving the guest page wording (wedding / ordination / …)
+    pub event_type: String,
+    /// gallery theme id, see web/src/lib/galleryThemes.ts
+    pub theme: String,
     /// photo chosen by the photographer as the share-link cover (OG image)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_photo_id: Option<String>,
@@ -42,7 +46,7 @@ pub struct EventWithCounts {
 }
 
 const EVENT_COLUMNS: &str =
-    "e.id, e.slug, e.title, e.partner_a, e.partner_b, e.event_date, e.pin, e.face_enabled, e.guestbook_enabled, e.upload_token, e.created_at, e.enabled, e.cover_photo_id";
+    "e.id, e.slug, e.title, e.partner_a, e.partner_b, e.event_date, e.pin, e.face_enabled, e.guestbook_enabled, e.upload_token, e.created_at, e.enabled, e.event_type, e.theme, e.cover_photo_id";
 const EVENT_COUNTS: &str = "\
  (SELECT COUNT(*) FROM photos p WHERE p.event_id = e.id) AS total, \
  (SELECT COUNT(*) FROM photos p WHERE p.event_id = e.id AND p.status = 'ready') AS ready, \
@@ -140,9 +144,31 @@ pub struct CreateReq {
     pub pin: String,
     #[serde(default = "default_true")]
     pub face_enabled: bool,
+    #[serde(default)]
+    pub event_type: String,
+    #[serde(default)]
+    pub theme: String,
 }
 fn default_true() -> bool {
     true
+}
+
+/// Template/theme ids come from the front-end registries. Keep them to a plain
+/// slug so a hand-crafted request can never put odd markup on the guest page;
+/// unknown-but-clean ids are allowed and the UI falls back to its default.
+pub(crate) fn normalize_design_id(raw: &str, fallback: &str) -> String {
+    let clean: String = raw
+        .trim()
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '-' || *c == '_')
+        .take(40)
+        .collect();
+    if clean.is_empty() {
+        fallback.to_string()
+    } else {
+        clean
+    }
 }
 
 pub async fn create(
@@ -179,9 +205,11 @@ pub async fn create(
         slug = format!("{qualified}-{}", random_suffix(5));
     }
     let id = new_id();
+    let event_type = normalize_design_id(&req.event_type, "wedding");
+    let theme = normalize_design_id(&req.theme, "kinpaku-gold");
     sqlx::query(
-        "INSERT INTO events(id, slug, title, partner_a, partner_b, event_date, pin, face_enabled, upload_token, created_at) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+        "INSERT INTO events(id, slug, title, partner_a, partner_b, event_date, pin, face_enabled, \
+         upload_token, created_at, event_type, theme) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
     )
     .bind(&id)
     .bind(&slug)
@@ -193,6 +221,8 @@ pub async fn create(
     .bind(req.face_enabled as i64)
     .bind(random_token())
     .bind(now_ms())
+    .bind(&event_type)
+    .bind(&theme)
     .execute(&st.pool)
     .await
     .map_err(AppError::from)?;
@@ -209,6 +239,8 @@ pub struct UpdateReq {
     pub pin: Option<String>,
     pub face_enabled: Option<bool>,
     pub guestbook_enabled: Option<bool>,
+    pub event_type: Option<String>,
+    pub theme: Option<String>,
 }
 
 pub async fn update(
@@ -261,6 +293,12 @@ pub async fn update(
     if let Some(v) = req.guestbook_enabled {
         ev.guestbook_enabled = v as i64;
     }
+    if let Some(v) = &req.event_type {
+        ev.event_type = normalize_design_id(v, &ev.event_type);
+    }
+    if let Some(v) = &req.theme {
+        ev.theme = normalize_design_id(v, &ev.theme);
+    }
     let face_toggled = match req.face_enabled {
         Some(true) if ev.face_enabled == 0 => {
             ev.face_enabled = 1;
@@ -275,7 +313,7 @@ pub async fn update(
 
     sqlx::query(
         "UPDATE events SET title=?1, slug=?2, partner_a=?3, partner_b=?4, event_date=?5, pin=?6, \
-         face_enabled=?7, guestbook_enabled=?8 WHERE id=?9",
+         face_enabled=?7, guestbook_enabled=?8, event_type=?9, theme=?10 WHERE id=?11",
     )
     .bind(&ev.title)
     .bind(&ev.slug)
@@ -285,6 +323,8 @@ pub async fn update(
     .bind(&ev.pin)
     .bind(ev.face_enabled)
     .bind(ev.guestbook_enabled)
+    .bind(&ev.event_type)
+    .bind(&ev.theme)
     .bind(&id)
     .execute(&st.pool)
     .await

@@ -50,6 +50,8 @@ import {
   type WishList,
 } from "@/lib/api"
 import { timeAgo } from "@/lib/format"
+import { EventTypePicker, ThemePicker } from "@/components/admin/DesignPickers"
+import { getTemplate } from "@/lib/eventTemplates"
 
 export default function EventDetail() {
   const { id } = useParams<{ id: string }>()
@@ -685,7 +687,16 @@ function SettingsPanel({ ev }: { ev: AdminEvent }) {
     pin: ev.pin,
     face_enabled: ev.face_enabled === 1,
     guestbook_enabled: ev.guestbook_enabled === 1,
+    event_type: ev.event_type,
+    theme: ev.theme,
   })
+  const tpl = getTemplate(form.event_type)
+  const pickType = (v: string) =>
+    setForm((f) => ({
+      ...f,
+      event_type: v,
+      theme: f.theme === getTemplate(f.event_type).defaultTheme ? getTemplate(v).defaultTheme : f.theme,
+    }))
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -699,7 +710,9 @@ function SettingsPanel({ ev }: { ev: AdminEvent }) {
       form.slug !== ev.slug ||
       form.pin !== ev.pin ||
       form.face_enabled !== (ev.face_enabled === 1) ||
-      form.guestbook_enabled !== (ev.guestbook_enabled === 1),
+      form.guestbook_enabled !== (ev.guestbook_enabled === 1) ||
+      form.event_type !== ev.event_type ||
+      form.theme !== ev.theme,
     [form, ev],
   )
 
@@ -739,15 +752,17 @@ function SettingsPanel({ ev }: { ev: AdminEvent }) {
             <Label>ชื่องาน</Label>
             <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid gap-3 ${tpl.solo ? "" : "sm:grid-cols-2"}`}>
             <div className="space-y-2">
-              <Label>คู่สมรส A</Label>
+              <Label>{tpl.nameA}</Label>
               <Input value={form.partner_a} onChange={(e) => setForm((f) => ({ ...f, partner_a: e.target.value }))} />
             </div>
-            <div className="space-y-2">
-              <Label>คู่สมรส B</Label>
-              <Input value={form.partner_b} onChange={(e) => setForm((f) => ({ ...f, partner_b: e.target.value }))} />
-            </div>
+            {!tpl.solo && (
+              <div className="space-y-2">
+                <Label>{tpl.nameB}</Label>
+                <Input value={form.partner_b} onChange={(e) => setForm((f) => ({ ...f, partner_b: e.target.value }))} />
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
@@ -800,13 +815,29 @@ function SettingsPanel({ ev }: { ev: AdminEvent }) {
         </CardContent>
       </Card>
 
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle className="font-display text-lg">ธีมของแกลเลอรี</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="space-y-2">
+            <p className="text-sm font-medium">ประเภทงาน</p>
+            <EventTypePicker value={form.event_type} onChange={pickType} />
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">ธีม</p>
+            <ThemePicker value={form.theme} onChange={(v) => setForm((f) => ({ ...f, theme: v }))} tpl={tpl} />
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="font-display text-lg">ดาวน์โหลด</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">คู่สมรสขอไฟล์ทั้งหมด — ดึง zip ไฟล์ต้นฉบับทั้งงาน</p>
+            <p className="text-sm text-muted-foreground">ลูกค้าขอไฟล์ทั้งหมด — ดึง zip ไฟล์ต้นฉบับทั้งงาน</p>
             <Button asChild variant="outline" className="rounded-full">
               <a href={`/api/events/${ev.id}/download.zip`}>
                 <Download className="mr-2 size-4" /> ดาวน์โหลดทั้งงาน (.zip)

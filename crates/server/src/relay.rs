@@ -1876,6 +1876,29 @@ fn inject_share_meta(html: String, title: &str, desc: &str, url: &str, image_url
 /// Guest entry: pretty `/e/{slug}/…` — look up which machine owns the event,
 /// forward, and set the tunnel cookie. Guests never see a tunnel prefix.
 /// First page view (no cookie yet) gets the share-preview meta injected.
+/// Share-card wording per event type. The hub proxies the photographer's own
+/// guest info, so this list mirrors the web template labels (eventTemplates.ts)
+/// and falls back to a neutral word for anything unknown.
+fn event_type_label(info: &serde_json::Value) -> &'static str {
+    match info["event_type"].as_str().unwrap_or("") {
+        "wedding" => "งานแต่ง",
+        "prewedding" => "พรีเวดดิ้ง",
+        "engagement" => "หมั้น",
+        "proposal" => "ขอแต่งงาน",
+        "anniversary" => "ครบรอบ",
+        "ordination" => "งานบวช",
+        "merit" => "ทำบุญ",
+        "birthday" => "วันเกิด",
+        "newborn" => "ต้อนรับลูกน้อย",
+        "graduation" => "รับปริญญา",
+        "corporate" => "งานบริษัท",
+        "event" => "อีเวนต์",
+        "sport" => "งานวิ่ง",
+        "memorial" => "ไว้อาลัย",
+        _ => "รูปงาน",
+    }
+}
+
 async fn guest_entry(
     State(state): State<SharedHub>,
     Path(p): Path<GuestPath>,
@@ -1904,7 +1927,12 @@ async fn guest_entry(
             tunnel_event_info(&state, &p.slug, &tunnel_id).await,
             crate::embedded_web_asset("index.html"),
         ) {
-            let title = info["title"].as_str().unwrap_or("แกลเลอรีงานแต่ง");
+            let type_label = event_type_label(&info);
+            let title_owned = match info["title"].as_str() {
+                Some(t) if !t.is_empty() => t.to_string(),
+                _ => format!("แกลเลอรี{type_label}"),
+            };
+            let title = title_owned.as_str();
             let origin = public_origin(&headers);
             let page = {
                 let url = format!("{origin}/e/{}", p.slug);
@@ -1922,9 +1950,9 @@ async fn guest_entry(
                     parts.push(format!("{n} รูป"));
                 }
                 let desc = if parts.is_empty() {
-                    "อัลบั้มรูปงานแต่งแบบ realtime — เปิดลิงก์เพื่อดูรูป".to_string()
+                    format!("อัลบั้มรูป{type_label} แบบ realtime — เปิดลิงก์เพื่อดูรูป")
                 } else {
-                    format!("อัลบั้มรูปงานแต่ง · {}", parts.join(" · "))
+                    format!("อัลบั้มรูป{type_label} · {}", parts.join(" · "))
                 };
                 inject_share_meta(
                     String::from_utf8(html.into_owned()).unwrap_or_default(),

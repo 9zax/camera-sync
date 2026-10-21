@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { listWishes, postWish, type WishList } from "@/lib/api"
 import { timeAgo } from "@/lib/format"
+import type { EventTemplate } from "@/lib/eventTemplates"
 
 const MAX_MESSAGE = 500
 const MAX_NAME = 40
@@ -21,7 +22,7 @@ function storedName(slug: string): string {
   }
 }
 
-export function Guestbook({ slug, guestId }: { slug: string; guestId: string }) {
+export function Guestbook({ slug, guestId, tpl }: { slug: string; guestId: string; tpl?: EventTemplate }) {
   const qc = useQueryClient()
   const [name, setName] = useState(() => storedName(slug))
   const [message, setMessage] = useState("")
@@ -73,10 +74,10 @@ export function Guestbook({ slug, guestId }: { slug: string; guestId: string }) 
               <div>
                 <h2 className="flex items-center gap-2 font-display text-xl font-semibold">
                   <MessageSquareHeart className="size-5 text-primary" />
-                  สมุดอวยพร
+                  {tpl?.wishTab ?? "สมุดอวยพร"}
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  เขียนคำอวยพรถึงคู่บ่าวสาว — ข้อความจะขึ้นบนจอในงานและเก็บไว้กับอัลบั้มนี้
+                  {tpl ? `${tpl.wishPrompt} — ข้อความจะขึ้นบนจอในงานและเก็บไว้กับอัลบั้มนี้` : "ข้อความจะขึ้นบนจอในงานและเก็บไว้กับอัลบั้มนี้"}
                 </p>
               </div>
               {wishesQuery.data && (
@@ -148,7 +149,7 @@ export function Guestbook({ slug, guestId }: { slug: string; guestId: string }) 
             <Quote className="mb-3 size-7 text-primary/70" />
             <h3 className="font-display text-lg font-semibold">ยังไม่มีคำอวยพร</h3>
             <p className="mt-1.5 max-w-xs text-sm text-muted-foreground">
-              เป็นคนแรกที่เขียนคำอวยพรให้คู่บ่าวสาวในวันสำคัญนี้
+              {tpl ? `เป็นคนแรกที่ ${tpl.wishPrompt}` : "เป็นคนแรกที่เขียนข้อความแรกให้วันนี้"}
             </p>
           </motion.div>
         ) : (

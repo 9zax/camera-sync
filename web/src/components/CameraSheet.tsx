@@ -47,6 +47,8 @@ export function CameraSheet({
 
   if (!open) return null
 
+  const mirrored = facing === "user"
+
   const capture = () => {
     const video = videoRef.current
     if (!video || !video.videoWidth) return
@@ -55,7 +57,7 @@ export function CameraSheet({
     canvas.width = 720
     canvas.height = 720
     const ctx = canvas.getContext("2d")!
-    if (facing === "user") {
+    if (mirrored) {
       ctx.translate(canvas.width, 0)
       ctx.scale(-1, 1) // mirror selfie like the preview
     }
@@ -131,11 +133,10 @@ export function CameraSheet({
             ref={videoRef}
             playsInline
             muted
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, scaleX: mirrored ? -0.96 : 0.96, scaleY: 0.96 }}
+            animate={{ opacity: 1, scaleX: mirrored ? -1 : 1, scaleY: 1 }}
             transition={{ duration: 0.35 }}
             className="max-h-full max-w-full rounded-xl"
-            style={{ transform: facing === "user" ? "scaleX(-1)" : undefined }}
           />
         )}
         {/* shutter flash overlay */}

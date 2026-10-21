@@ -66,7 +66,7 @@ pub async fn resolve_or_create_event(st: &SharedState, event: &Option<String>, d
         .file_name()
         .and_then(|n| n.to_str())
         .map(|n| n.to_string())
-        .unwrap_or_else(|| "งานแต่งของฉัน".into());
+        .unwrap_or_else(|| "อัลบั้มรูปของฉัน".into());
     let created = sqlx::query_scalar::<_, String>(
         "SELECT id FROM events ORDER BY created_at DESC LIMIT 1",
     )

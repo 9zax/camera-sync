@@ -29,6 +29,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { api, photoUrl, type AdminEvent, type PhotoList } from "@/lib/api"
+import { EventTypePicker, ThemePicker } from "@/components/admin/DesignPickers"
+import { DEFAULT_THEME_ID, getTheme } from "@/lib/galleryThemes"
+import { DEFAULT_EVENT_TYPE, formatNames, getTemplate } from "@/lib/eventTemplates"
 import { formatEventDate } from "@/lib/format"
 
 export default function AdminPage() {
@@ -267,7 +270,10 @@ function EventCard({ event, index = 0 }: { event: AdminEvent; index?: number }) 
     onError: (e) => toast.error(String(e)),
   })
   const cover = photosQuery.data?.items?.[0]
-  const couple = [event.partner_a, event.partner_b].filter(Boolean).join(" ♥ ")
+  const tpl = getTemplate(event.event_type)
+  const theme = getTheme(event.theme)
+  const TypeIcon = tpl.icon
+  const couple = formatNames(tpl, event.partner_a, event.partner_b)
   const offline = event.enabled === 0
   const qrSrc = `/api/events/${event.id}/qr.png?base=${encodeURIComponent(window.location.origin)}`
   return (
@@ -317,6 +323,19 @@ function EventCard({ event, index = 0 }: { event: AdminEvent; index?: number }) 
             )}
           </div>
           <CardContent className="pt-4">
+            <div className="mb-2 flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                <TypeIcon className="size-3 text-gold" /> {tpl.label}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--rule)] px-2 py-0.5 text-[10px] text-muted-foreground">
+                <span className="flex gap-0.5" aria-hidden>
+                  {theme.swatch.map((c, i) => (
+                    <span key={i} className="size-2 rounded-full" style={{ background: c }} />
+                  ))}
+                </span>
+                {theme.name}
+              </span>
+            </div>
             <h3 className="truncate font-display text-lg font-semibold group-hover:text-primary">{event.title}</h3>
             {couple && <p className="-mt-0.5 truncate text-sm text-primary">{couple}</p>}
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -397,7 +416,17 @@ function CreateEventDialog() {
     event_date: "",
     pin: "",
     face_enabled: true,
+    event_type: DEFAULT_EVENT_TYPE,
+    theme: DEFAULT_THEME_ID,
   })
+  const tpl = getTemplate(form.event_type)
+  const pickType = (v: string) =>
+    setForm((f) => ({
+      ...f,
+      event_type: v,
+      // follow the new template's house theme only if the old default was still in use
+      theme: f.theme === getTemplate(f.event_type).defaultTheme ? getTemplate(v).defaultTheme : f.theme,
+    }))
   const qc = useQueryClient()
   const create = useMutation({
     mutationFn: () =>
@@ -408,7 +437,16 @@ function CreateEventDialog() {
     onSuccess: (ev) => {
       toast.success(`สร้างงาน "${ev.title}" แล้ว`)
       setOpen(false)
-      setForm({ title: "", partner_a: "", partner_b: "", event_date: "", pin: "", face_enabled: true })
+      setForm({
+        title: "",
+        partner_a: "",
+        partner_b: "",
+        event_date: "",
+        pin: "",
+        face_enabled: true,
+        event_type: DEFAULT_EVENT_TYPE,
+        theme: DEFAULT_THEME_ID,
+      })
       void qc.invalidateQueries({ queryKey: ["events"] })
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "สร้างงานไม่สำเร็จ"),
@@ -422,7 +460,7 @@ function CreateEventDialog() {
           <Plus className="mr-2 size-4" /> สร้างงานใหม่
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="font-display">สร้างงานใหม่</DialogTitle>
           <DialogDescription>ระบบจะสร้างลิงก์สาธารณะ + QR + upload token ให้อัตโนมัติ</DialogDescription>
@@ -435,18 +473,24 @@ function CreateEventDialog() {
           className="space-y-4"
         >
           <div className="space-y-2">
-            <Label htmlFor="ev-title">ชื่องาน *</Label>
-            <Input id="ev-title" value={form.title} onChange={(e) => set("title")(e.target.value)} placeholder="งานแต่งภูมิ & ใบหมี" required />
+            <p className="text-sm font-medium">ประเภทงาน</p>
+            <EventTypePicker value={form.event_type} onChange={pickType} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="ev-title">ชื่องาน *</Label>
+            <Input id="ev-title" value={form.title} onChange={(e) => set("title")(e.target.value)} placeholder={tpl.titleHint} required />
+          </div>
+          <div className={`grid gap-3 ${tpl.solo ? "" : "sm:grid-cols-2"}`}>
             <div className="space-y-2">
-              <Label htmlFor="ev-a">คู่สมรส A</Label>
-              <Input id="ev-a" value={form.partner_a} onChange={(e) => set("partner_a")(e.target.value)} placeholder="ภูมิ" />
+              <Label htmlFor="ev-a">{tpl.nameA}</Label>
+              <Input id="ev-a" value={form.partner_a} onChange={(e) => set("partner_a")(e.target.value)} placeholder={tpl.hintA} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="ev-b">คู่สมรส B</Label>
-              <Input id="ev-b" value={form.partner_b} onChange={(e) => set("partner_b")(e.target.value)} placeholder="ใบหมี" />
-            </div>
+            {!tpl.solo && (
+              <div className="space-y-2">
+                <Label htmlFor="ev-b">{tpl.nameB}</Label>
+                <Input id="ev-b" value={form.partner_b} onChange={(e) => set("partner_b")(e.target.value)} placeholder={tpl.hintB} />
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
@@ -457,6 +501,10 @@ function CreateEventDialog() {
               <Label htmlFor="ev-pin">PIN (ไม่บังคับ)</Label>
               <Input id="ev-pin" value={form.pin} onChange={(e) => set("pin")(e.target.value)} placeholder="เช่น 1208" maxLength={12} />
             </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">ธีมของแกลเลอรี</p>
+            <ThemePicker value={form.theme} onChange={(v) => set("theme")(v)} tpl={tpl} collapsible />
           </div>
           <div className="flex items-center justify-between rounded-xl border border-border p-3.5">
             <div className="flex items-center gap-2.5">
