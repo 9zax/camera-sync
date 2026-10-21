@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<!--
+  ต้นฉบับของ docs/arch.png — แก้ข้อความที่นี่แล้ว render ใหม่:
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+    --headless=new --hide-scrollbars --force-device-scale-factor=2 \
+    --window-size=1400,880 --screenshot=docs/arch.png docs/arch.html
+-->
+<title>CameraSync — สถาปัตยกรรม Hub &amp; เครื่องช่างภาพ</title>
+<style>
+  :root{
+    --ink:#2B231B; --ink2:#5C4F40; --paper:#F7F1E6; --card:#FFFDF8;
+    --gold:#C89B4B; --gold-soft:#F0C97E; --green:#2E7D4F; --green-deep:#234030;
+    --hair:#D8CCB8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:1400px;height:880px;overflow:hidden;}
+  body{
+    font-family:-apple-system,"SF Pro Text","SF Pro Thai","Thonburi","Sukhumvit Set",sans-serif;
+    background:
+      radial-gradient(1100px 520px at 82% -10%, #FBF6EC 0%, transparent 60%),
+      var(--paper);
+    color:var(--ink);
+    position:relative;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;}
+
+  /* ---------- header ---------- */
+  .logo{position:absolute;left:64px;top:34px;width:62px;height:62px;}
+  h1{position:absolute;left:142px;top:34px;font-size:27px;font-weight:800;letter-spacing:.1px;}
+  h1 .amp{color:var(--gold);font-weight:700;}
+  .subtitle{position:absolute;left:142px;top:74px;font-size:14.5px;color:var(--ink2);}
+  .subtitle b{color:var(--ink);font-weight:700;}
+  .chips{position:absolute;left:142px;top:102px;display:flex;gap:8px;}
+  .chip{
+    font-size:12.5px;font-weight:600;color:var(--green-deep);
+    background:#E9F0E7;border:1px solid #C8D6C4;border-radius:999px;
+    padding:4px 12px;white-space:nowrap;
+  }
+  .rule{position:absolute;left:64px;right:64px;top:150px;border-top:1.5px solid var(--hair);}
+
+  /* ---------- boxes ---------- */
+  .box{
+    position:absolute;background:var(--card);border:1.5px solid var(--ink);
+    border-radius:16px;box-shadow:0 10px 26px rgba(43,35,27,.10);
+    overflow:hidden;
+  }
+  .box .head{display:flex;align-items:center;gap:12px;padding:13px 18px;}
+  .box .head .t{font-size:17.5px;font-weight:800;color:#fff;line-height:1.3;}
+  .box .head .c{font-size:11.5px;color:rgba(255,255,255,.78);margin-top:2px;line-height:1.35;}
+  .box .body{padding:14px 16px;display:flex;flex-direction:column;gap:9px;}
+  .row{
+    display:flex;gap:10px;align-items:flex-start;
+    border:1px solid var(--hair);border-radius:11px;background:#FBF7EE;
+    padding:8px 11px;
+  }
+  .row .ico{flex:0 0 auto;width:17px;height:17px;margin-top:2px;}
+  .row .tx{font-size:13px;line-height:1.5;color:var(--ink);}
+  .row .tx b{font-weight:700;}
+  .row .tx .sub{color:var(--ink2);font-size:11.5px;}
+
+  /* desktop (photographer) */
+  #desk{left:64px;top:178px;width:400px;height:428px;}
+  #desk .head{background:var(--green-deep);}
+  /* hub */
+  #hub{left:900px;top:178px;width:436px;height:252px;}
+  #hub .head{background:var(--ink);}
+  #hub .head .t{color:var(--gold-soft);}
+  /* guests */
+  #guest{left:900px;top:490px;width:436px;height:172px;}
+  #guest .head{background:#7A5A2E;}
+
+  .badge{
+    display:flex;gap:9px;align-items:flex-start;
+    background:#3A3020;color:#F5E9CF;border-radius:11px;padding:9px 12px;
+    font-size:12.5px;line-height:1.5;
+  }
+  .badge b{color:var(--gold-soft);font-weight:800;}
+
+  .own{
+    margin-top:1px;font-size:11.5px;color:var(--ink2);text-align:center;
+  }
+
+  /* ---------- tunnel band ---------- */
+  #tunnel{
+    position:absolute;left:494px;top:196px;width:378px;height:236px;
+    background:linear-gradient(180deg,#33291F 0%,#221A12 100%);
+    border-radius:18px;box-shadow:0 10px 26px rgba(43,35,27,.16);
+    padding:16px 18px;color:#F3EADA;
+  }
+  #tunnel .kick{font-size:11px;letter-spacing:.22em;color:var(--gold-soft);font-weight:700;}
+  #tunnel .t{font-size:19px;font-weight:800;margin-top:4px;line-height:1.3;}
+  #tunnel .note{font-size:11.5px;color:#CBBBA0;margin-top:3px;line-height:1.45;}
+  #tunnel .code{
+    margin-top:10px;background:#171009;border:1px solid #57451F;border-radius:9px;
+    padding:7px 10px;font-size:11.5px;color:var(--gold-soft);white-space:nowrap;
+  }
+  #tunnel .dir{display:flex;gap:8px;align-items:flex-start;margin-top:9px;}
+  #tunnel .dir .ar{flex:0 0 auto;font-size:14px;font-weight:800;color:var(--gold-soft);width:30px;line-height:1.4;}
+  #tunnel .dir .d{font-size:12px;line-height:1.5;color:#F3EADA;}
+  #tunnel .dir .d b{color:var(--gold-soft);}
+
+  /* ---------- arrows overlay ---------- */
+  svg.wires{position:absolute;inset:0;width:1400px;height:880px;pointer-events:none;}
+
+  /* LAN label */
+  #lanlabel{
+    position:absolute;left:318px;top:742px;width:460px;text-align:center;
+    font-size:13.5px;font-weight:700;color:var(--green);line-height:1.4;
+  }
+  #lanlabel .sub{font-size:12px;font-weight:600;color:#4E6E5C;}
+
+  /* hub->guest label */
+  #hgl{
+    position:absolute;left:1128px;top:436px;width:170px;
+    font-size:11.5px;font-weight:700;color:var(--ink2);line-height:1.45;
+  }
+
+  /* ---------- footer ---------- */
+  .footer{
+    position:absolute;left:64px;right:64px;top:806px;height:52px;
+    border-top:1.5px solid var(--hair);padding-top:11px;
+    display:flex;gap:26px;justify-content:space-between;
+  }
+  .foot{display:flex;gap:9px;align-items:flex-start;width:33%;}
+  .foot .dot{flex:0 0 auto;width:15px;height:15px;margin-top:1px;}
+  .foot .tx{font-size:11.8px;line-height:1.5;color:var(--ink2);}
+  .foot .tx b{color:var(--ink);}
+</style>
+</head>
+<body>
+
+  <!-- header -->
+  <img class="logo" src="../assets/logo.svg" alt="CameraSync">
+  <h1>CameraSync — สถาปัตยกรรม Hub <span class="amp">&amp;</span> เครื่องช่างภาพ</h1>
+  <div class="subtitle">รูปงานแต่ง <b>หนึ่งงาน หนึ่งแหล่ง</b> — ทุกไฟล์อยู่บนดิสก์เครื่องช่างภาพ hub เป็นแค่ท่อส่งต่อ</div>
+  <div class="chips">
+    <span class="chip">hub ไม่เก็บไฟล์ภาพเอง</span>
+    <span class="chip">เชื่อมกลับด้วยลิงก์เดียว (dial-out)</span>
+    <span class="chip">เปิด desktop app ใช้ได้ทันที</span>
+  </div>
+  <div class="rule"></div>
+
+  <!-- photographer machine -->
+  <div class="box" id="desk">
+    <div class="head">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#F0C97E" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>
+      <div>
+        <div class="t">เครื่องช่างภาพ</div>
+        <div class="c">desktop app (Tauri) · ดิสก์ของตัวเอง เปิดทิ้งไว้ตลอดงาน</div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="row">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#234030" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><circle cx="7" cy="7.5" r="1" fill="#234030" stroke="none"/><circle cx="7" cy="16.5" r="1" fill="#234030" stroke="none"/></svg>
+        <div class="tx"><b>wedsync-server :8080</b> — API + pipeline + Face AI<br><span class="sub">InsightFace ในเครื่อง · เซลฟี่ประมวลผลใน RAM ไม่ถูกเก็บ</span></div>
+      </div>
+      <div class="row">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#234030" stroke-width="1.8" stroke-linecap="round"><ellipse cx="12" cy="5.5" rx="8" ry="2.8"/><path d="M4 5.5v13c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8v-13"/><path d="M4 12c0 1.5 3.6 2.8 8 2.8s8-1.3 8-2.8"/></svg>
+        <div class="tx"><b>SQLite + รูปทั้งหมด</b> อยู่บนดิสก์นี้<br><span class="sub">thumb 480 / web 2048 / original — ไม่หมดอายุ ไม่ถูกย่อความละเอียด</span></div>
+      </div>
+      <div class="row">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#234030" stroke-width="1.8" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
+        <div class="tx"><b>sync agent</b> — watch/push จาก tether folder<br><span class="sub">Lightroom / Capture One · กันซ้ำด้วย blake3</span></div>
+      </div>
+      <div class="row">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#234030" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3L4 14h6l-1 7 9-11h-6l1-7z"/></svg>
+        <div class="tx"><b>tunnel client</b> — เปิดการเชื่อมต่อออกหา hub เอง<br><span class="sub">อยู่หลัง NAT ก็ใช้ได้ · หลุดแล้วต่อใหม่ทุก 2 วินาที</span></div>
+      </div>
+      <div class="own">เจ้าของข้อมูล 100% คือช่างภาพ</div>
+    </div>
+  </div>
+
+  <!-- tunnel band -->
+  <div id="tunnel">
+    <div class="kick">ท่อเชื่อมเส้นเดียวของระบบ</div>
+    <div class="t">WebSocket ถาวร (dial-out)</div>
+    <div class="note">ฝั่งช่างภาพเป็นคนเปิดหา hub เสมอ — ไม่ต้องเปิดพอร์ตรับเข้าเลย</div>
+    <div class="code mono">wss://hub/r/connect/u-&lt;user&gt;?token=…</div>
+    <div class="dir">
+      <span class="ar">⟶</span>
+      <span class="d"><b>announce รายชื่องาน (slug)</b> ทุก 60 วินาที → hub เก็บตาราง <span class="mono">slug → tunnel</span></span>
+    </div>
+    <div class="dir">
+      <span class="ar">⟵</span>
+      <span class="d"><b>ซอง HTTP (JSON+base64)</b> — request ของแขกเข้า, ภาพ + ข้อมูลตอบกลับ</span>
+    </div>
+  </div>
+
+  <!-- hub -->
+  <div class="box" id="hub">
+    <div class="head">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#F0C97E" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 17.5A9 9 0 1 1 20 6.5"/><path d="M20 3v4h-4" transform="translate(1 1) scale(.9)"/></svg>
+      <div>
+        <div class="t">Hub (VPS · :9000)</div>
+        <div class="c">ของผู้ให้บริการ · deploy ครั้งเดียว · sync.khunaistory.com</div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="row">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#2B231B" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c.8-3.4 3.7-5.2 7-5.2s6.2 1.8 7 5.2"/></svg>
+        <div class="tx"><b>บัญชีผู้ใช้ + LINE Login</b><br><span class="sub">ออก machine token ให้แอปอัตโนมัติ</span></div>
+      </div>
+      <div class="row">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#2B231B" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/><circle cx="19" cy="18" r="2" fill="#2B231B" stroke="none"/></svg>
+        <div class="tx"><b>ตาราง slug → tunnel</b> ใน SQLite เล็ก ๆ<br><span class="sub">แปลงลิงก์ <span class="mono">/e/{slug}/</span> ไปหาเครื่องช่างภาพที่ถูกต้อง</span></div>
+      </div>
+      <div class="badge">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F0C97E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;margin-top:2px"><path d="M12 3l7 4v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V7l7-4z"/><path d="M9 12l2 2 4-4"/></svg>
+        <span><b>zero photo storage</b> — ภาพไหลผ่าน RAM เท่านั้น ไม่มีไฟล์ภาพถูกเขียนลงดิสก์เด็ดขาด</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- guests -->
+  <div class="box" id="guest">
+    <div class="head">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#F7ECD9" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>
+      <div>
+        <div class="t">แขก</div>
+        <div class="c">ไม่ต้องติดแอป ไม่ต้องสมัคร ไม่มี OTP — สแกนแล้วดูเลย</div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="row">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#7A5A2E" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM19.5 14.5v2M17 19.5h5"/></svg>
+        <div class="tx"><b>แขกในงาน</b> — สแกน QR บน Wi-Fi ของงาน</div>
+      </div>
+      <div class="row">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#7A5A2E" stroke-width="1.8" stroke-linecap="round"><path d="M4 12.5C6 10 8.8 8.7 12 8.7s6 1.3 8 3.8"/><path d="M7 16c1.3-1.5 3-2.2 5-2.2s3.7.7 5 2.2"/><circle cx="12" cy="19.4" r="1.3" fill="#7A5A2E" stroke="none"/></svg>
+        <div class="tx"><b>แขกที่บ้าน</b> — เปิดลิงก์สวย <span class="mono">https://hub/e/{slug}/</span><br><span class="sub">ดูรูปสด + ถ่ายเซลฟี่ค้นหารูปตัวเอง (AI face search)</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- arrows -->
+  <svg class="wires" viewBox="0 0 1400 880">
+    <defs>
+      <marker id="ah-gold" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0L10 5L0 10z" fill="#2B231B"/>
+      </marker>
+      <marker id="ah-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
+        <path d="M0 0L10 5L0 10z" fill="#2E7D4F"/>
+      </marker>
+    </defs>
+
+    <!-- desktop <-> tunnel band <-> hub (two thin connectors) -->
+    <line x1="464" y1="266" x2="494" y2="266" stroke="#2B231B" stroke-width="2.5" marker-end="url(#ah-gold)"/>
+    <line x1="872" y1="266" x2="900" y2="266" stroke="#2B231B" stroke-width="2.5" marker-end="url(#ah-gold)"/>
+    <line x1="900" y1="300" x2="872" y2="300" stroke="#2B231B" stroke-width="2.5" marker-end="url(#ah-gold)"/>
+    <line x1="494" y1="300" x2="464" y2="300" stroke="#2B231B" stroke-width="2.5" marker-end="url(#ah-gold)"/>
+
+    <!-- hub -> guest -->
+    <line x1="1118" y1="430" x2="1118" y2="488" stroke="#2B231B" stroke-width="2.5" marker-end="url(#ah-gold)"/>
+
+    <!-- LAN direct: desktop bottom -> guest left -->
+    <path d="M 264 606 C 264 748, 560 776, 800 742 C 862 733, 892 660, 898 588"
+          fill="none" stroke="#2E7D4F" stroke-width="3" stroke-dasharray="1 0" marker-end="url(#ah-green)"/>
+  </svg>
+
+  <div id="hgl">ภาพสด realtime<br>ผ่าน tunnel</div>
+
+  <div id="lanlabel">
+    LAN ตรง (Wi-Fi ของงาน) — ยิง IP เครื่องช่างภาพได้เลย
+    <div class="sub">ไม่ผ่าน hub · อินเทอร์เน็ตนอกวงล่มก็ยังเดิน</div>
+  </div>
+
+  <!-- footer -->
+  <div class="footer">
+    <div class="foot">
+      <svg class="dot" viewBox="0 0 24 24" fill="none" stroke="#2E7D4F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
+      <span class="tx"><b>ทุกอย่างไหลกลับมาเครื่องช่างภาพ</b> — รูป ฐานข้อมูล และโมเดล AI ไม่ถูกย้ายออกจากดิสก์เครื่องนี้เลย</span>
+    </div>
+    <div class="foot">
+      <svg class="dot" viewBox="0 0 24 24" fill="none" stroke="#C89B4B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+      <span class="tx"><b>hub ตั้งใจออกแบบให้เก็บภาพไม่ได้</b> — ไม่มีโค้ดสายใดเขียน bytes ภาพลงดิสก์ แม้ media directory ยังไม่ถูกสร้าง</span>
+    </div>
+    <div class="foot">
+      <svg class="dot" viewBox="0 0 24 24" fill="none" stroke="#7A5A2E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.6-9.5-9A5.4 5.4 0 0 1 12 6.4 5.4 5.4 0 0 1 21.5 12C19 16.4 12 21 12 21z"/></svg>
+      <span class="tx"><b>ช่างภาพออฟไลน์?</b> hub แสดงหน้า "เครื่องช่างภาพออฟไลน์" แล้วเชื่อมให้ใหม่อัตโนมัติเมื่อกลับมา</span>
+    </div>
+  </div>
+
+</body>
+</html>

@@ -364,6 +364,8 @@ pub async fn run_server(
         importer::start(state.clone(), dir.clone(), event_id);
         // FTP receiver: cameras push photos straight into the watched folder
         let ftp_port: u16 = std::env::var("FTP_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(2121);
+        // remember which event the photographer aimed the camera at last time
+        ftp::restore_target(&state, &state.cfg.data_dir, &dir).await;
         tokio::spawn({
             let data_dir = state.cfg.data_dir.clone();
             async move {
@@ -413,6 +415,9 @@ async fn serve_http(state: SharedState, port: u16) -> anyhow::Result<()> {
         .route("/api/events/{id}/photos", get(photos::list_admin).post(photos::upload))
         .route("/api/u/{token}/info", get(photos::token_info))
         .route("/api/u/{token}/photos", post(photos::upload_by_token))
+        .route("/api/ftp/target", get(ftp::get_target_route).post(ftp::set_target_route))
+        .route("/api/m/ftp-target/{slug}", post(ftp::machine_set_target_by_slug))
+        .route("/api/m/ftp-target", get(ftp::machine_get_target))
         .route("/api/m/{slug}/rename", post(events::machine_rename))
         .route("/api/m/{slug}/cover", post(events::machine_cover))
         .route("/api/m/{slug}/photos", get(events::machine_photos))

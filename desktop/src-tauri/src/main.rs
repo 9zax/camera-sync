@@ -65,6 +65,8 @@ struct Status {
     face_state: String, // ready | loading | unavailable
     lan_ip: Option<String>,
     ftp: Option<wedsync_server::ftp::FtpInfo>,
+    /// events the camera can be aimed at: (event_id, slug, title)
+    ftp_options: Vec<(String, String, String)>,
 }
 
 impl App {
@@ -259,7 +261,15 @@ async fn get_status(app: State<'_, App>) -> Result<Status, String> {
         import_dir: default_import_dir().display().to_string(),
         face_state,
         lan_ip: wedsync_server::util::lan_ip(),
-        ftp: wedsync_server::ftp::info().cloned(),
+        ftp: wedsync_server::ftp::info(),
+        ftp_options: match wedsync_server::server_state() {
+            Some(st) => wedsync_server::ftp::target_options(&st)
+                .await
+                .into_iter()
+                .map(|(eid, slug, title, _dir)| (eid, slug, title))
+                .collect(),
+            None => vec![],
+        },
     })
 }
 
@@ -477,6 +487,15 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     }
     tray.build(app)?;
     Ok(())
+}
+
+#[tauri::command]
+async fn ftp_set_target(event_id: String) -> Result<(), String> {
+    let st = server_state_or_err()?;
+    wedsync_server::ftp::apply_target(&st, &event_id)
+        .await
+        .map(|_| ())
+        .map_err(|e| format!("ตั้งปลายทาง FTP ไม่สำเร็จ: {e:?}"))
 }
 
 #[tauri::command]

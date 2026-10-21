@@ -209,6 +209,8 @@ pub async fn run_hub(port: u16, data_dir: PathBuf) -> anyhow::Result<()> {
         .route("/r/line/rename", post(line_rename))
         .route("/r/line/cover", post(line_cover))
         .route("/r/line/photos/{slug}", get(line_photos))
+        .route("/r/line/ftp-target/{slug}", post(line_ftp_target))
+        .route("/r/line/ftp-target", get(line_ftp_target_get))
         .route("/r/line/thumb/{slug}/{photo_id}", get(line_thumb))
         .route("/r/machine/info", get(machine_info))
         .route("/r/line/start", get(line_web_start))
@@ -754,6 +756,41 @@ async fn line_my_slugs(State(st): State<SharedHub>, headers: HeaderMap) -> Respo
     Json(serde_json::json!({ "slugs": slugs })).into_response()
 }
 
+/// Aim the camera FTP receiver at an event (from the photographer's phone).
+async fn line_ftp_target(State(st): State<SharedHub>, headers: HeaderMap, Json(req): Json<LineActionReq>) -> Response {
+    if web_session_user(&st, &headers).await.is_none() {
+        return crate::error::AppError::Unauthorized("กรุณาเข้าสู่ระบบด้วย LINE ก่อน".into()).into_response();
+    }
+    line_machine_proxy(
+        &st,
+        &req.slug,
+        Method::POST,
+        format!("/api/m/ftp-target/{}", req.slug),
+        Some(serde_json::json!({})),
+    )
+    .await
+}
+
+/// Which event is currently receiving camera photos (to badge the card).
+async fn line_ftp_target_get(State(st): State<SharedHub>, headers: HeaderMap) -> Response {
+    if web_session_user(&st, &headers).await.is_none() {
+        return crate::error::AppError::Unauthorized("login required".into()).into_response();
+    }
+    // ask the first connected machine of this user — proxy GET via its tunnel
+    let Some(username) = web_session_user(&st, &headers).await else {
+        return crate::error::AppError::Unauthorized("login required".into()).into_response();
+    };
+    let slugs = my_slugs(&st, &username).await;
+    let Some(any_slug) = slugs.first() else {
+        return axum::Json(serde_json::json!({ "slug": "" })).into_response();
+    };
+    line_machine_proxy(st_ref(&st), any_slug, Method::GET, "/api/m/ftp-target".to_string(), None).await
+}
+
+fn st_ref(st: &SharedHub) -> &SharedHub {
+    st
+}
+
 /// Proxy a machine-token-authenticated action through the event's tunnel.
 async fn line_machine_proxy(
     st: &SharedHub,
@@ -906,6 +943,32 @@ function clearCover(){
     .catch(function(){alert('บันทึกไม่สำเร็จ')});
 }
 function closeCover(){document.getElementById('coverModal').classList.remove('show')}
+function aimFtp(slug){
+  fetch('/r/line/ftp-target/'+encodeURIComponent(slug),{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+    .then(function(r){if(!r.ok)throw 0;return r.json()})
+    .then(function(d){alert('กล้อง FTP จะส่งรูปลงงาน: '+(d.title||slug));markFtp(slug)})
+    .catch(function(){alert('ตั้งปลายทางไม่สำเร็จ — เครื่องช่างภาพออนไลน์อยู่ไหม?'});
+}
+function markFtp(slug){
+  document.querySelectorAll('[id^=ftpbtn-]').forEach(function(b){
+    b.style.borderColor='';b.style.color='';
+    var card=b.closest('.card');var badge=card.querySelector('.ftpbadge');if(badge)badge.remove();
+  });
+  var btn=document.getElementById('ftpbtn-'+slug);
+  if(btn){
+    btn.style.borderColor='oklch(84% .19 80.46)';btn.style.color='oklch(84% .19 80.46)';
+    var span=document.createElement('span');
+    span.className='ftpbadge';
+    span.style.cssText='display:inline-block;margin-left:8px;font-size:11px;color:oklch(70% .12 188)';
+    span.textContent='● กล้องส่งลงงานนี้';
+    btn.parentNode.appendChild(span);
+  }
+}
+document.addEventListener('DOMContentLoaded',function(){
+  fetch('/r/line/ftp-target').then(function(r){return r.json()}).then(function(d){
+    if(d&&d.slug)markFtp(d.slug);
+  }).catch(function(){});
+});
 document.getElementById('coverModal').addEventListener('click',function(e){if(e.target===this)closeCover()});
 </script>"#;
 
@@ -952,6 +1015,7 @@ async fn line_me_page(State(st): State<SharedHub>, headers: HeaderMap) -> Respon
         <div class="row">
           <button class="btn" onclick="renameAlbum('{slug}','{album_escaped}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>ตั้งชื่ออัลบั้ม</button>
           <button class="btn ghost" onclick="pickCover('{slug}','{cover}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>เลือกภาพปก</button>
+          <button class="btn ghost" id="ftpbtn-{slug}" onclick="aimFtp('{slug}')" title="ทำให้กล้องที่ส่ง FTP ลงงานนี้"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>รับรูปกล้อง FTP</button>
           <a class="btn ghost" href="/r/qr/{slug}" download="CameraSync-{slug}-qr.png">ดาวน์โหลด QR</a>
           <a class="btn ghost" href="/e/{slug}/" target="_blank" rel="noopener">เปิดหน้าลูกค้า</a>
           <button class="btn ghost" onclick="navigator.clipboard.writeText('{url}').then(()=>this.textContent='คัดลอกแล้ว ✓')">คัดลอกลิงก์</button>

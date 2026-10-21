@@ -166,6 +166,9 @@
       <p class="sub">กล้องที่มี FTP ในตัว (Canon R5/R6 II+, Nikon Z8/Z9, Sony A9 III/A7 IV+, Fuji) ตั้งค่าส่งรูปมาที่เครื่องนี้ได้เลย — รูปจะเข้าอัลบั้มอัตโนมัติที่กดชัตเตอร์</p>
       <div class="status"><span class="dot on"></span><span>โฮสต์: <b id="ftpHost"></b> · พอร์ต <b id="ftpPort"></b></span></div>
       <div class="status"><span class="dot on"></span><span>ผู้ใช้: <b id="ftpUser"></b> · รหัส: <b id="ftpPass"></b></span></div>
+      <div class="status" style="align-items:center;gap:8px"><span class="dot on"></span><span>รูปจากกล้องลงงาน:</span>
+        <select id="ftpTarget" style="background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:4px;padding:6px 8px;font-family:inherit;font-size:13px"></select>
+      </div>
       <p class="sub" id="ftpHint" style="margin-top:8px">ในกล้องเลือกปลายทางแบบ FTP แล้วกรอกค่าด้านบน (โหมด Passive ใช้ได้)</p>
     </div>
     <!-- one-click LINE login -->
@@ -265,6 +268,17 @@
           $("ftpPort").textContent = s.ftp.port;
           $("ftpUser").textContent = s.ftp.user;
           $("ftpPass").textContent = s.ftp.pass;
+        }
+        if (s.ftp && s.ftp_options && s.ftp_options.length) {
+          const sel = $("ftpTarget");
+          const cur = s.ftp.target_slug || "";
+          sel.innerHTML = s.ftp_options
+            .map(function (o) {
+              const lab = (o[2] || o[1]) + " — /" + o[1] + "/";
+              return '<option value="' + o[0] + '"' + (o[1] === cur ? " selected" : "") + ">" + lab + "</option>";
+            })
+            .join("");
+          sel.disabled = false;
         }
         if (s.face_state === "ready") {
           face.className = "dot on";
@@ -398,6 +412,20 @@
       // initial + periodic refresh (cheap local DB query)
       const refresh = async () => {
         try { renderStatus(await invoke("get_status")); } catch {}
+        const ftpSel = $("ftpTarget");
+        if (ftpSel && !ftpSel.dataset.wired) {
+          ftpSel.dataset.wired = "1";
+          ftpSel.addEventListener("change", async () => {
+            ftpSel.disabled = true;
+            try {
+              await invoke("ftp_set_target", { eventId: ftpSel.value });
+              toast("เปลี่ยนปลายทางกล้องแล้ว — รูปใหม่ลงงานที่เลือก ✓");
+            } catch (e) {
+              toast(String(e));
+            }
+            refresh();
+          });
+        }
       };
       refresh();
       setInterval(refresh, 2000);
