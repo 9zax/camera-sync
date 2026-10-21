@@ -27,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Logo, LogoMark } from "@/components/Logo"
 import { ObjectsShowcase } from "@/components/ObjectsShowcase"
+import { WallDemo } from "@/components/WallDemo"
 
 /* ---------------------------------- motion --------------------------------- */
 
@@ -83,6 +84,12 @@ const stats = [
   ["~30 วินาที", "รูปใหม่ถึงมือลูกค้า"],
   ["0 แอป", "ลูกค้าไม่ต้องติดตั้ง"],
   ["100%", "ไฟล์เต็มคุณภาพ"],
+]
+
+const wallFacts = [
+  ["Realtime", "รูปใหม่ขึ้นจอภายในงาน"],
+  ["11 ทรานซิชัน", "สลับแบบสุ่ม ไม่ซ้ำติดกัน"],
+  ["ทุกรูปทรง", "ภาพแนวตั้งมีพื้นหลังเบลอเอง"],
 ]
 
 /* --------------------------------- section --------------------------------- */
@@ -145,6 +152,10 @@ export default function Landing() {
           <nav className="flex items-center gap-7">
             <a href="#how" className="group relative hidden text-[13.5px] text-muted-foreground transition-colors hover:text-foreground sm:block">
               ขั้นตอนการใช้งาน
+              <span className="absolute -bottom-1 left-0 h-px w-0 bg-gold transition-all duration-300 group-hover:w-full" />
+            </a>
+            <a href="#wall" className="group relative hidden text-[13.5px] text-muted-foreground transition-colors hover:text-foreground sm:block">
+              Live Wall
               <span className="absolute -bottom-1 left-0 h-px w-0 bg-gold transition-all duration-300 group-hover:w-full" />
             </a>
             <a href="/tests" className="group relative hidden text-[13.5px] text-muted-foreground transition-colors hover:text-foreground sm:block">
@@ -279,6 +290,38 @@ export default function Landing() {
               </motion.div>
             ))}
           </div>
+        </motion.div>
+      </Section>
+
+      {/* live wall — the projector experience itself, running on stock photos */}
+      <Section id="wall" className="pb-24 sm:pb-28">
+        <motion.div variants={stagger(0.08)} initial="hidden" whileInView="show" viewport={{ once: true, margin: "-60px" }}>
+          <motion.div variants={reveal} className="text-center">
+            <Kicker>Live Wall</Kicker>
+            <h2 className="mt-6 font-display text-3xl font-semibold tracking-tight sm:text-[2.6rem] sm:leading-tight">
+              ทุกรูปในงาน <span className="text-gold">ขึ้นจอเอง</span>
+            </h2>
+            <p className="mx-auto mt-5 max-w-2xl text-pretty text-[14.5px] leading-relaxed text-muted-foreground sm:text-[15px]">
+              สไลด์โชว์ที่ต่อกับแกลเลอรีของคุณตรง ๆ ช็อตที่กดชัตเตอร์เมื่อครู่โผล่บนจอกลางงานทันที
+              ไม่ต้องกดเปลี่ยน ไม่ต้องเรียงมือ และไม่มีภาพเสียคั่นกลาง
+            </p>
+          </motion.div>
+
+          <motion.div variants={reveal} className="mt-12">
+            <WallDemo />
+          </motion.div>
+
+          <motion.div
+            variants={reveal}
+            className="mx-auto mt-10 flex max-w-2xl divide-x divide-[var(--rule)] border-t border-[var(--rule)]"
+          >
+            {wallFacts.map(([v, l]) => (
+              <div key={l} className="flex-1 px-4 pt-4 text-center">
+                <div className="font-display text-lg font-light text-foreground">{v}</div>
+                <div className="mt-1 text-[11.5px] leading-snug text-muted-foreground">{l}</div>
+              </div>
+            ))}
+          </motion.div>
         </motion.div>
       </Section>
 

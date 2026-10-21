@@ -28,7 +28,11 @@ import {
   type WishItem,
 } from "@/lib/api"
 import { createWallRenderer } from "@/lib/wallGL"
-import { WALL_TRANSITIONS, type WallTransition } from "@/lib/wallTransitions"
+import {
+  easeInOut,
+  pickTransition,
+  type WallTransition,
+} from "@/lib/wallTransitions"
 import { formatEventDate } from "@/lib/format"
 
 const SLIDE_MS = 6500
@@ -48,13 +52,6 @@ type Plan = {
   toStart: number
   transition: WallTransition | null
 }
-
-function pickTransition(previous: string | null): WallTransition {
-  const pool = WALL_TRANSITIONS.filter((t) => t.name !== previous)
-  return pool[Math.floor(Math.random() * pool.length)]
-}
-
-const easeInOut = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2)
 
 function tunnelPrefix(): string {
   const m = document.cookie.match(/(?:^|;\s*)cs_tunnel=([\w-]+)/)

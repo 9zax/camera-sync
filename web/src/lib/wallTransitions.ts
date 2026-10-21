@@ -183,3 +183,13 @@ export const WALL_TRANSITIONS: WallTransition[] = [
   t("water-drop", waterDrop, 1600, { amplitude: "float", speed: "float" }, { amplitude: 13, speed: 9 }),
   t("overexposure", overexposure, 1300, { strength: "float" }, { strength: 0.5 }),
 ]
+
+/** Pick at random, never twice running — a repeated wipe reads as a loop. */
+export function pickTransition(previous: string | null): WallTransition {
+  const pool = WALL_TRANSITIONS.filter((x) => x.name !== previous)
+  return pool[Math.floor(Math.random() * pool.length)]
+}
+
+/** slow-out, slow-in hand-off curve; linear drift uses time directly */
+export const easeInOut = (x: number) =>
+  x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2

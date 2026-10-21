@@ -293,7 +293,9 @@ export function createWallRenderer(canvas: HTMLCanvasElement): WallHandle | null
       progs.clear()
       gl.deleteProgram(sceneProg)
       gl.deleteBuffer(buffer)
-      gl.getExtension("WEBGL_lose_context")?.loseContext()
+      // deliberately not WEBGL_lose_context: React remounts this component in
+      // StrictMode and on every hot edit, and a lost context is never recovered
+      // by the next createWallRenderer() — it shares this same canvas
     },
   }
 }
