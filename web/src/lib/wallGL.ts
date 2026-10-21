@@ -16,6 +16,8 @@ const BACK_W = 32
 const BACK_H = 18
 const ZOOM_TO = 1.07
 const PAN = 0.018
+/** the two frames a hand-off blends, plus the next photo, uploaded while idle */
+const MAX_ENTRIES = 3
 
 type Scene = { img: HTMLImageElement; pan: [number, number] }
 type Tex = GLTextureLike & { tex: WebGLTexture }
@@ -25,6 +27,9 @@ export type WallHandle = {
   prepare: (id: string, img: HTMLImageElement) => boolean
   /**
    * Draws `to` alone, or blends `from` -> `to` with `transition`.
+   * `progress` is clamped to 0..1 and a missing `from` degrades to `to`, never
+   * the other way round — so a hand-off frame that arrives late still shows the
+   * incoming photo rather than a black canvas.
    * False means the frame was not ready — the canvas keeps its last image.
    */
   render: (
@@ -35,6 +40,10 @@ export type WallHandle = {
     toT: number,
     transition: WallTransition | null,
   ) => boolean
+  /** compile a transition's program now, so the first blended frame doesn't pay for it */
+  prewarm: (transition: WallTransition) => void
+  /** re-draw the last frame; resize() clears the canvas, this refills it in the same task */
+  repaint: () => void
   resize: () => void
   prune: (keep: (string | null)[]) => void
   dispose: () => void
@@ -214,6 +223,50 @@ export function createWallRenderer(canvas: HTMLCanvasElement): WallHandle | null
 
   const progs = new Map<string, ReturnType<typeof createTransition> | null>()
 
+  const getProg = (transition: WallTransition) => {
+    let handle = progs.get(transition.name)
+    if (handle === undefined) {
+      try {
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+        handle = createTransition(gl, transition, { resizeMode: "cover" })
+      } catch {
+        handle = null
+      }
+      progs.set(transition.name, handle)
+    }
+    return handle
+  }
+
+  type RenderArgs = Parameters<WallHandle["render"]>
+  let lastFrame: RenderArgs | null = null
+
+  const drawFrame = (
+    fromId: string | null,
+    toId: string,
+    progress: number,
+    fromT: number,
+    toT: number,
+    transition: WallTransition | null,
+  ): boolean => {
+    const to = entries.get(toId)
+    if (!to) return false
+    resize()
+    const from = fromId ? entries.get(fromId) : undefined
+    const handle = from && transition ? getProg(transition) : null
+    if (!from || !transition || !handle) {
+      drawScene(null, to, toT)
+      return true
+    }
+    drawScene(targets[0], from, fromT)
+    drawScene(targets[1], to, toT)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    gl.viewport(0, 0, size.w, size.h)
+    const params: Record<string, unknown> = {}
+    if (transition.paramsTypes.luma === "sampler2D") params.luma = targets[1].tex
+    handle.draw(Math.min(1, Math.max(0, progress)), targets[0].tex, targets[1].tex, size.w, size.h, params)
+    return true
+  }
+
   return {
     prepare: (id, img) => {
       const hit = entries.get(id)
@@ -232,45 +285,25 @@ export function createWallRenderer(canvas: HTMLCanvasElement): WallHandle | null
       return true
     },
 
-    render: (fromId, toId, progress, fromT, toT, transition) => {
-      const to = entries.get(toId)
-      if (!to) return false
-      resize()
-      const from = fromId ? entries.get(fromId) : undefined
-      if (progress <= 0 || !from || !transition) {
-        drawScene(null, to, toT)
-        return true
-      }
-      let handle = progs.get(transition.name)
-      if (handle === undefined) {
-        try {
-          gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-          handle = createTransition(gl, transition, { resizeMode: "cover" })
-        } catch {
-          handle = null
-        }
-        progs.set(transition.name, handle)
-      }
-      if (!handle) {
-        drawScene(null, to, toT)
-        return true
-      }
-      drawScene(targets[0], from, fromT)
-      drawScene(targets[1], to, toT)
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-      gl.viewport(0, 0, size.w, size.h)
-      const params: Record<string, unknown> = {}
-      if (transition.paramsTypes.luma === "sampler2D") params.luma = targets[1].tex
-      handle.draw(progress, targets[0].tex, targets[1].tex, size.w, size.h, params)
-      return true
+    render: (...args) => {
+      lastFrame = args
+      return drawFrame(...args)
+    },
+
+    repaint: () => {
+      if (lastFrame) drawFrame(...lastFrame)
+    },
+
+    prewarm: (transition) => {
+      getProg(transition)
     },
 
     resize,
     prune: (keep) => {
-      if (entries.size <= 3) return
+      if (entries.size <= MAX_ENTRIES) return
       const pinned = new Set(keep)
       for (const [id, e] of [...entries].sort((a, b) => a[1].used - b[1].used)) {
-        if (entries.size <= 3) break
+        if (entries.size <= MAX_ENTRIES) break
         if (pinned.has(id)) continue
         gl.deleteTexture(e.photo.tex)
         gl.deleteTexture(e.back.tex)

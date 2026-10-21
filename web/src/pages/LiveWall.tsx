@@ -7,11 +7,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Expand,
+  EyeOff,
   ImageOff,
   Loader2,
   Minimize,
   Pause,
   Play,
+  QrCode,
   Quote,
   Sparkles,
 } from "lucide-react"
@@ -33,12 +35,15 @@ import { formatNames, getTemplate } from "@/lib/eventTemplates"
 import {
   easeInOut,
   pickTransition,
+  WALL_TRANSITIONS,
   type WallTransition,
 } from "@/lib/wallTransitions"
 import { formatEventDate } from "@/lib/format"
 
 const SLIDE_MS = 6500
 const WISH_EVERY = 7
+/** wall displays are set up once per venue — remember a hidden QR corner across reloads */
+const QR_HIDDEN_KEY = "cs-wall-qr-hidden"
 
 type Slide =
   | { kind: "photo"; key: string; photo: PhotoItem }
@@ -53,6 +58,19 @@ type Plan = {
   toId: string | null
   toStart: number
   transition: WallTransition | null
+  /** false until the incoming texture is uploaded; the wipe clock starts then */
+  armed: boolean
+  /** the photo after `toId`, uploaded while it is still off screen */
+  nextId: string | null
+}
+
+/** the next photo slide after `from`, looking past any wishes in between */
+function nextPhotoId(slides: Slide[], from: number): string | null {
+  for (let step = 1; step <= slides.length; step++) {
+    const s = slides[(from + step) % slides.length]
+    if (s?.kind === "photo") return s.photo.id
+  }
+  return null
 }
 
 function tunnelPrefix(): string {
@@ -67,13 +85,22 @@ export default function LiveWall() {
   const [paused, setPaused] = useState(false)
   const [isFull, setIsFull] = useState(false)
   const [showUi, setShowUi] = useState(true)
+  const [qrHidden, setQrHidden] = useState(() => localStorage.getItem(QR_HIDDEN_KEY) === "1")
   const [fresh, setFresh] = useState(false)
   const hideTimer = useRef<number | undefined>(undefined)
   const prevCount = useRef(0)
 
   const reduced = useReducedMotion()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const planRef = useRef<Plan>({ fromId: null, fromStart: 0, toId: null, toStart: 0, transition: null })
+  const planRef = useRef<Plan>({
+    fromId: null,
+    fromStart: 0,
+    toId: null,
+    toStart: 0,
+    transition: null,
+    armed: false,
+    nextId: null,
+  })
   const lastFxRef = useRef<string | null>(null)
   const imagesRef = useRef(new Map<string, HTMLImageElement>())
   const [glActive, setGlActive] = useState(false)
@@ -175,18 +202,20 @@ export default function LiveWall() {
   }, [index, paused, slides.length])
 
   // what the canvas should be blending: a hand-off starts the moment the wall
-  // moves to a different photo, and only between two photos
+  // moves to a different photo. The photo before a wish is still on the canvas,
+  // so the wipe after a wish blends from it instead of cutting.
   useEffect(() => {
     if (!glActive || slide?.kind !== "photo") return
     const plan = planRef.current
     if (plan.toId === slide.photo.id) return
-    const prev = slides[(index - 1 + slides.length) % slides.length]
     const now = performance.now()
     plan.fromId = plan.toId
     plan.fromStart = plan.toStart
     plan.toId = slide.photo.id
     plan.toStart = now
-    const canBlend = !!plan.fromId && plan.fromId !== slide.photo.id && prev?.kind === "photo"
+    plan.armed = false
+    plan.nextId = nextPhotoId(slides, index)
+    const canBlend = !!plan.fromId && plan.fromId !== slide.photo.id
     plan.transition = canBlend ? pickTransition(lastFxRef.current) : null
     if (plan.transition) lastFxRef.current = plan.transition.name
   }, [slide, index, slides, glActive])
@@ -201,30 +230,58 @@ export default function LiveWall() {
     setGlActive(true)
 
     let raf = 0
+    let fxWarm = 0
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop)
       const plan = planRef.current
       if (!plan.toId) return
-      if (!handle.prepare(plan.toId, getImage(plan.toId))) return // still decoding
-      if (plan.fromId) handle.prepare(plan.fromId, getImage(plan.fromId))
-      const duration = plan.transition?.durationMs ?? 0
-      const elapsed = duration > 0 ? now - plan.toStart : duration
-      const progress = reduced || !duration ? 1 : Math.min(1, easeInOut(elapsed / duration))
       const drift = (since: number) => (reduced ? 0 : Math.min(1, (now - since) / SLIDE_MS))
+      if (!handle.prepare(plan.toId, getImage(plan.toId))) {
+        // the incoming photo is still decoding — hold the current one, still
+        // drifting, rather than freezing whatever was last painted
+        const hold = plan.fromId
+        if (hold && handle.prepare(hold, getImage(hold))) {
+          const d = drift(plan.fromStart)
+          handle.render(null, hold, 0, d, d, null)
+        }
+        return
+      }
+      if (plan.fromId) handle.prepare(plan.fromId, getImage(plan.fromId))
+      // upload the next photo while this one is on screen, so a hand-off never
+      // begins on the frame its texture arrives
+      if (plan.nextId && plan.nextId !== plan.toId) handle.prepare(plan.nextId, getImage(plan.nextId))
+      // the hand-off clock starts on the first frame that can draw it: a slow
+      // decode delays the wipe instead of silently eating its first half
+      if (!plan.armed) {
+        plan.armed = true
+        plan.toStart = now
+      }
+      const duration = plan.transition?.durationMs ?? 0
+      const progress = reduced || !duration ? 1 : Math.min(1, easeInOut((now - plan.toStart) / duration))
+      // drop the outgoing frame the moment the wipe lands: render() then draws
+      // the new photo alone, instead of blending it back to progress 0
+      if (progress >= 1) plan.fromId = null
       handle.render(
         plan.fromId,
         plan.toId,
-        progress >= 1 ? 0 : progress,
+        progress,
         drift(plan.fromStart),
         drift(plan.toStart),
         plan.transition,
       )
-      if (progress >= 1) plan.fromId = null
-      handle.prune([plan.toId, plan.fromId])
+      if (progress >= 1) {
+        // compile the wipe shaders one per idle frame. Compiling lazily lands a
+        // ~20ms stall on the first blended frame, which reads as a skipped wipe
+        handle.prewarm(WALL_TRANSITIONS[fxWarm++ % WALL_TRANSITIONS.length])
+      }
+      handle.prune([plan.toId, plan.fromId, plan.nextId])
     }
     raf = requestAnimationFrame(loop)
 
-    const onResize = () => handle.resize()
+    const onResize = () => {
+      handle.resize()
+      handle.repaint() // resizing empties the canvas; refill it before the next frame shows it
+    }
     window.addEventListener("resize", onResize)
     document.addEventListener("fullscreenchange", onResize)
     return () => {
@@ -304,6 +361,15 @@ export default function LiveWall() {
     }
   }, [])
 
+  const toggleQr = useCallback(() => {
+    setQrHidden((h) => !h)
+    poke()
+  }, [poke])
+
+  useEffect(() => {
+    localStorage.setItem(QR_HIDDEN_KEY, qrHidden ? "1" : "0")
+  }, [qrHidden])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code === "Space") {
@@ -316,11 +382,13 @@ export default function LiveWall() {
         prev()
       } else if (e.key.toLowerCase() === "f") {
         void toggleFullscreen()
+      } else if (e.key.toLowerCase() === "q") {
+        toggleQr()
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [next, prev, toggleFullscreen, poke])
+  }, [next, prev, toggleFullscreen, toggleQr, poke])
 
   const needsPin = [photosQuery.error, infoQuery.error].some(
     (e) => e instanceof ApiError && e.status === 401,
@@ -404,11 +472,14 @@ export default function LiveWall() {
       onMouseMove={poke}
       onClick={poke}
     >
-      {/* photos — WebGL canvas: slow drift + shader hand-off */}
+      {/* photos — WebGL canvas: slow drift + shader hand-off.
+          Kept in layout (invisible, never display:none): a hidden canvas has no
+          size, so the wall would create its 2x2-pixel fallback targets and spend
+          the first hand-off resizing them mid-blend */}
       <canvas
         ref={canvasRef}
         aria-hidden
-        className={`absolute inset-0 h-full w-full ${glActive ? "block" : "hidden"}`}
+        className={`absolute inset-0 h-full w-full ${glActive ? "visible" : "invisible"}`}
       />
 
       {/* wishes (and photos on devices without WebGL) stay in the DOM */}
@@ -489,20 +560,30 @@ export default function LiveWall() {
         </div>
       </header>
 
-      {/* QR — stays on screen all night */}
-      <div className="absolute bottom-24 right-6 z-30 hidden w-[172px] flex-col items-center gap-2.5 rounded-2xl border border-white/12 bg-black/45 p-4 text-center backdrop-blur-md md:flex">
-        <img
-          src={qrSrc}
-          alt="QR แกลเลอรี"
-          className="w-full rounded-lg bg-[oklch(97%_0.01_90)] p-2"
-        />
-        <p className="text-[11.5px] font-medium leading-snug text-white/85">
-          สแกนเพื่อดูรูปทั้งหมด
-          <span className="mt-0.5 block truncate font-mono text-[9.5px] font-normal text-white/45">
-            {galleryUrl.replace(/^https?:\/\//, "")}
-          </span>
-        </p>
-      </div>
+      {/* QR — on screen all night unless the operator hides it (Q) */}
+      <AnimatePresence>
+        {!qrHidden && (
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 14 }}
+            transition={{ duration: 0.25 }}
+            className="absolute bottom-24 right-6 z-30 hidden w-[172px] flex-col items-center gap-2.5 rounded-2xl border border-white/12 bg-black/45 p-4 text-center backdrop-blur-md md:flex"
+          >
+            <img
+              src={qrSrc}
+              alt="QR แกลเลอรี"
+              className="w-full rounded-lg bg-[oklch(97%_0.01_90)] p-2"
+            />
+            <p className="text-[11.5px] font-medium leading-snug text-white/85">
+              สแกนเพื่อดูรูปทั้งหมด
+              <span className="mt-0.5 block truncate font-mono text-[9.5px] font-normal text-white/45">
+                {galleryUrl.replace(/^https?:\/\//, "")}
+              </span>
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* controls */}
       <AnimatePresence>
@@ -519,7 +600,7 @@ export default function LiveWall() {
               {paused ? "หยุดชั่วคราว — กดเล่นเพื่อไปต่อ" : "รูปใหม่ขึ้นจอเองระหว่างงาน"}
               <span className="hidden text-white/25 sm:inline">·</span>
               <span className="hidden font-mono text-[10px] tracking-wide text-white/30 sm:inline">
-                Space เล่น/หยุด · ← → เลื่อน · F เต็มจอ
+                Space เล่น/หยุด · ← → เลื่อน · F เต็มจอ · Q {qrHidden ? "แสดง QR" : "ซ่อน QR"}
               </span>
             </p>
             <div className="flex items-center gap-2">
@@ -541,6 +622,9 @@ export default function LiveWall() {
               </WallButton>
               <WallButton label={isFull ? "ออกจากเต็มจอ" : "เต็มจอ"} onClick={() => void toggleFullscreen()}>
                 {isFull ? <Minimize className="size-4" /> : <Expand className="size-4" />}
+              </WallButton>
+              <WallButton label={qrHidden ? "แสดง QR" : "ซ่อน QR"} onClick={toggleQr}>
+                {qrHidden ? <QrCode className="size-4" /> : <EyeOff className="size-4" />}
               </WallButton>
               <span className="ml-2 hidden font-mono text-[11px] tabular-nums text-white/35 sm:inline">
                 {index + 1} / {slides.length}

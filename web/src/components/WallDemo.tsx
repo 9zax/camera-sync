@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react"
 import { createWallRenderer } from "@/lib/wallGL"
-import { easeInOut, pickTransition } from "@/lib/wallTransitions"
+import { easeInOut, pickTransition, WALL_TRANSITIONS } from "@/lib/wallTransitions"
 
 /**
  * Live Wall demo for the landing page: the projector wall itself, running on
@@ -92,6 +92,7 @@ export function WallDemo() {
 
     let raf = 0
     let still = 0
+    let fxWarm = 0
     let onScreen = true
 
     // reduced motion: one still frame, no loop — but the wall still shows a photo
@@ -116,22 +117,21 @@ export function WallDemo() {
       // frame instead of waiting for a slide that can never be scheduled
       if (!plan.toId) advance()
       if (!plan.toId) return
-      const toImg = load(plan.toId)
-      if (!handle.prepare(plan.toId, toImg)) return
+      const next = PHOTOS[(slot + 1) % PHOTOS.length]
+      if (!handle.prepare(plan.toId, load(plan.toId))) return
       if (plan.fromId) handle.prepare(plan.fromId, load(plan.fromId))
       const duration = plan.transition?.durationMs ?? 0
       const progress = duration ? Math.min(1, easeInOut((t - plan.toStart) / duration)) : 1
-      const drift = (since: number) => Math.min(1, (t - since) / SLIDE_MS)
-      handle.render(
-        plan.fromId,
-        plan.toId,
-        progress >= 1 ? 0 : progress,
-        drift(plan.fromStart),
-        drift(plan.toStart),
-        plan.transition,
-      )
       if (progress >= 1) plan.fromId = null
-      handle.prune([plan.toId, plan.fromId])
+      const drift = (since: number) => Math.min(1, (t - since) / SLIDE_MS)
+      handle.render(plan.fromId, plan.toId, progress, drift(plan.fromStart), drift(plan.toStart), plan.transition)
+      if (progress >= 1) {
+        // idle work for the coming hand-off: upload the next photo and compile
+        // a wipe shader, so neither stalls the frame the wipe starts on
+        handle.prepare(next, load(next))
+        handle.prewarm(WALL_TRANSITIONS[fxWarm++ % WALL_TRANSITIONS.length])
+      }
+      handle.prune([plan.toId, plan.fromId, next])
       if (t - plan.toStart >= SLIDE_MS) advance()
     }
     raf = requestAnimationFrame(loop)
@@ -140,7 +140,10 @@ export function WallDemo() {
       cancelAnimationFrame(raf)
       handle.dispose()
     }
-    const onResize = () => handle.resize()
+    const onResize = () => {
+      handle.resize()
+      handle.repaint() // resizing empties the canvas; refill it before the next frame shows it
+    }
     window.addEventListener("resize", onResize)
 
     const watcher = new IntersectionObserver(
