@@ -28,6 +28,8 @@ const COLUMNS = 8
 const DRIFT = 10 // px/s slow-motion auto move
 
 // ---- verified Unsplash wedding photographs (free to use, hotlinked) ----
+// One entry per card: NAMES.length === UNSPLASH.length, otherwise `photoIdx`
+// wraps and the last row becomes a duplicate of the first.
 
 const UNSPLASH = [
   "1519741497674-611481863552",
@@ -46,6 +48,14 @@ const UNSPLASH = [
   "1474552226712-ac0f0961a954",
   "1522057384400-681b421cfebc",
   "1550005809-91ad75fb315f",
+  "1731603827045-75fea9c24e31",
+  "1767201226872-6beb8f211e9c",
+  "1614780484212-397fc21a6fa0",
+  "1769540241663-920ac32da75f",
+  "1759581620687-8e3d6691d64e",
+  "1672289508233-f393cb329b0b",
+  "1769251296969-a4c7aa0b4478",
+  "1762319981432-609103ab4a75",
 ]
 
 const NAMES: [string, string, string, string][] = [
